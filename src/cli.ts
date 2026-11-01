@@ -26,6 +26,7 @@ Uso:
       --ufs SP,MG                        importa só estas UFs (recomendado)
       --mes 2026-10                      mês de referência (padrão: nome da pasta)
       --temp <pasta>                     pasta para arquivos temporários (padrão: a do banco)
+      --memoria 4GB                      limite de memória (padrão: 30% da RAM)
   radar-cnpj-mcp buscar [filtros]        lista empresas no terminal
       --cnae 4520-0/01   --uf SP   --municipio Campinas   --bairro Centro
       --aberta-apos 2025-01-01   --sem-mei   --limite 20   --json
@@ -90,7 +91,12 @@ async function runImport(args: string[], databasePath: string): Promise<void> {
   const { values, positionals } = parseArgs({
     args,
     allowPositionals: true,
-    options: { ufs: { type: 'string' }, mes: { type: 'string' }, temp: { type: 'string' } },
+    options: {
+      ufs: { type: 'string' },
+      mes: { type: 'string' },
+      temp: { type: 'string' },
+      memoria: { type: 'string' },
+    },
   });
   const [sourceDir] = positionals;
   if (!sourceDir) {
@@ -107,6 +113,7 @@ async function runImport(args: string[], databasePath: string): Promise<void> {
     states: values.ufs?.split(',').filter(Boolean) ?? [],
     ...(values.mes ? { referenceMonth: values.mes } : {}),
     ...(values.temp ? { tempDir: resolve(values.temp) } : {}),
+    ...(values.memoria ? { memoryLimit: values.memoria } : {}),
     log: (message) => console.error(message),
   });
 

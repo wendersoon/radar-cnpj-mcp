@@ -1,4 +1,5 @@
 import { mkdir, mkdtemp, readdir, rename, rm } from 'node:fs/promises';
+import { totalmem } from 'node:os';
 import { basename, dirname, join } from 'node:path';
 import { UFS } from '../domain/codes.ts';
 import { Database, type SqlParam, sqlLiteral } from './database.ts';
@@ -8,6 +9,13 @@ import { forEachChunk, latin1ToUtf8 } from './zip.ts';
 export const SCHEMA_VERSION = '1';
 
 const DEFAULT_CHUNK_BYTES = 128 * 1024 * 1024;
+const WORK_DIR_PREFIX = '.radar-import-';
+
+/** DuckDB defaults to 80% of the RAM, which gets the import killed on busy machines. */
+export function defaultMemoryLimit(totalBytes: number = totalmem()): string {
+  const megabytes = Math.max(1024, Math.floor((totalBytes * 0.3) / 1024 / 1024));
+  return `${megabytes}MB`;
+}
 
 export interface ImportOptions {
   /** Folder with the monthly ZIP files published by Receita Federal. */
@@ -21,6 +29,8 @@ export interface ImportOptions {
   tempDir?: string;
   /** Size of the pieces the CSV files are processed in. */
   chunkBytes?: number;
+  /** DuckDB memory limit, e.g. "4GB". Defaults to 30% of the RAM. */
+  memoryLimit?: string;
   log?: (message: string) => void;
 }
 
@@ -59,12 +69,16 @@ export async function importDataset(options: ImportOptions): Promise<ImportSumma
   await mkdir(dirname(options.databasePath), { recursive: true });
   await mkdir(tempDir, { recursive: true });
   await removeDatabase(tempPath);
-  const workDir = await mkdtemp(join(tempDir, '.radar-import-'));
+  await removeStaleWorkDirs(tempDir, log);
+  const workDir = await mkdtemp(join(tempDir, WORK_DIR_PREFIX));
   const db = await Database.open(tempPath);
 
   let establishments: number;
   try {
     await db.run(`SET temp_directory = ${sqlLiteral(join(workDir, 'spill'))}`);
+    await db.run(`SET memory_limit = ${sqlLiteral(options.memoryLimit ?? defaultMemoryLimit())}`);
+    // Bulk loads need far less memory when rows may be stored in any order.
+    await db.run('SET preserve_insertion_order = false');
     await db.run(`ATTACH ${sqlLiteral(join(workDir, 'staging.duckdb'))} AS raw`);
     await createRawTables(db);
 
@@ -87,6 +101,7 @@ export async function importDataset(options: ImportOptions): Promise<ImportSumma
     }
 
     log('Montando a base de busca...');
+    await db.run('SET preserve_insertion_order = true');
     await buildSearchTables(db, log);
     await writeMetadata(db, { states, referenceMonth });
     await db.run('DETACH raw');
@@ -287,6 +302,16 @@ async function writeMetadata(
   ];
   for (const [key, value] of entries) {
     await db.run('INSERT INTO metadados VALUES ($1, $2)', [key, value]);
+  }
+}
+
+/** Removes work folders left behind by imports that were killed. */
+async function removeStaleWorkDirs(tempDir: string, log: (message: string) => void): Promise<void> {
+  for (const name of await readdir(tempDir)) {
+    if (name.startsWith(WORK_DIR_PREFIX)) {
+      log(`Removendo arquivos temporários de uma importação interrompida: ${name}`);
+      await rm(join(tempDir, name), { recursive: true, force: true });
+    }
   }
 }
 

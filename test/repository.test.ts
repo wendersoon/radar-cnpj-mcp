@@ -1,9 +1,9 @@
-import { mkdtemp, readdir, readFile, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, readdir, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { Database } from '../src/data/database.ts';
-import { ImportError, importDataset } from '../src/data/importer.ts';
+import { defaultMemoryLimit, ImportError, importDataset } from '../src/data/importer.ts';
 import { CompanyRepository } from '../src/data/repository.ts';
 import { countSchema, searchSchema } from '../src/domain/filters.ts';
 import { createDatasetFolder } from './fixtures.ts';
@@ -56,6 +56,14 @@ describe('import', () => {
     expect(await readdir(workDir)).not.toContainEqual(expect.stringMatching(/^\.radar-import-/));
   });
 
+  it('cleans up after imports that were killed and honors a memory limit', async () => {
+    const dir = await mkdtemp(join(workDir, 'killed-'));
+    await mkdir(join(dir, '.radar-import-old'));
+    const path = join(dir, 'radar.duckdb');
+    await importDataset({ sourceDir, databasePath: path, memoryLimit: '512MB' });
+    expect(await readdir(dir)).toEqual(['radar.duckdb']);
+  });
+
   it('rejects folders without the required files', async () => {
     await expect(
       importDataset({ sourceDir: workDir, databasePath: join(workDir, 'x.duckdb') }),
@@ -66,6 +74,13 @@ describe('import', () => {
     await expect(
       importDataset({ sourceDir, databasePath: join(workDir, 'y.duckdb'), states: ['XX'] }),
     ).rejects.toThrow('UF inválida: XX');
+  });
+});
+
+describe('memory limit', () => {
+  it('uses 30% of the RAM, at least 1 GB', () => {
+    expect(defaultMemoryLimit(16 * 1024 ** 3)).toBe('4915MB');
+    expect(defaultMemoryLimit(2 * 1024 ** 3)).toBe('1024MB');
   });
 });
 
