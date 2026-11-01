@@ -211,6 +211,10 @@ describe('lookups', () => {
     });
     expect(await repo.getCompany('00.000.000/0000-00')).toBeNull();
   });
+
+  it('cleans stray control bytes from the source files', async () => {
+    expect((await repo.getCompany('33333333000120'))?.nome_fantasia).toBe('MERCADO BOM PRECO');
+  });
 });
 
 describe('export', () => {

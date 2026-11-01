@@ -3,7 +3,7 @@ import { basename, dirname, join } from 'node:path';
 import { UFS } from '../domain/codes.ts';
 import { Database, type SqlParam, sqlLiteral } from './database.ts';
 import { COLUMNS, classifyFile, type FileKind, REQUIRED_KINDS } from './layout.ts';
-import { forEachChunk } from './zip.ts';
+import { forEachChunk, latin1ToUtf8 } from './zip.ts';
 
 export const SCHEMA_VERSION = '1';
 
@@ -178,8 +178,12 @@ async function loadZip(
   where: string,
   params: SqlParam[],
 ): Promise<void> {
-  await forEachChunk(zipPath, workDir, chunkBytes, (csv) =>
-    db.run(`INSERT INTO raw.${kind} SELECT * FROM ${readCsv(csv, kind)} ${where}`, params),
+  await forEachChunk(
+    zipPath,
+    workDir,
+    chunkBytes,
+    (csv) => db.run(`INSERT INTO raw.${kind} SELECT * FROM ${readCsv(csv, kind)} ${where}`, params),
+    latin1ToUtf8,
   );
 }
 
@@ -187,7 +191,7 @@ function readCsv(path: string, kind: FileKind): string {
   const columns = COLUMNS[kind].map((column) => `'${column}': 'VARCHAR'`).join(', ');
   return (
     `read_csv(${sqlLiteral(path)}, delim = ';', header = false, quote = '"', escape = '"', ` +
-    `encoding = 'latin-1', columns = {${columns}})`
+    `columns = {${columns}})`
   );
 }
 

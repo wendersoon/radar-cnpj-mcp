@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import yazl from 'yazl';
-import { forEachChunk, lastRecordBoundary } from '../src/data/zip.ts';
+import { forEachChunk, lastRecordBoundary, latin1ToUtf8 } from '../src/data/zip.ts';
 
 let dir: string;
 
@@ -30,6 +30,13 @@ describe('lastRecordBoundary', () => {
   it('supports CRLF line endings', () => {
     const data = Buffer.from('"1"\r\n"2"');
     expect(data.subarray(0, lastRecordBoundary(data)).toString()).toBe('"1"\r\n');
+  });
+});
+
+describe('latin1ToUtf8', () => {
+  it('converts accents and drops stray control bytes', () => {
+    const latin1 = Buffer.from([0x22, 0x53, 0xc3, 0x4f, 0x8f, 0x00, 0x22, 0x0a]);
+    expect(latin1ToUtf8(latin1).toString('utf8')).toBe('"SÃO"\n');
   });
 });
 

@@ -143,6 +143,8 @@ const estabelecimentos: Row[] = [
     ordem: '0001',
     dv: '20',
     matriz: true,
+    // A stray control byte, as found in the real October 2026 release.
+    fantasia: 'MERCADO\u008f BOM PRECO',
     situacao: '02',
     abertura: '20100505',
     cnae: '4711302',

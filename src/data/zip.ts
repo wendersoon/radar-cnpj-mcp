@@ -22,6 +22,19 @@ export function lastRecordBoundary(data: Buffer): number {
   return best;
 }
 
+/** Control characters that are never meaningful in the Receita files (keeps \t, \n and \r). */
+// biome-ignore lint/suspicious/noControlCharactersInRegex: matching control characters is the point.
+const CONTROL_CHARACTERS = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/g;
+
+/**
+ * Converts ISO-8859-1 bytes to UTF-8, dropping stray control characters.
+ * Decoding latin-1 never fails, unlike strict CSV readers that reject a whole
+ * file because of one garbage byte.
+ */
+export function latin1ToUtf8(data: Buffer): Buffer {
+  return Buffer.from(data.toString('latin1').replace(CONTROL_CHARACTERS, ''), 'utf8');
+}
+
 /**
  * Streams every file of a ZIP archive and hands it over in temporary chunk
  * files of roughly chunkBytes, always cut between records. Each chunk is
@@ -33,6 +46,7 @@ export async function forEachChunk(
   workDir: string,
   chunkBytes: number,
   onChunk: (path: string) => Promise<void>,
+  transform: (data: Buffer) => Buffer = (data) => data,
 ): Promise<void> {
   const zip = await yauzl.openPromise(zipPath, { lazyEntries: true });
   let chunkIndex = 0;
@@ -42,7 +56,7 @@ export async function forEachChunk(
       return;
     }
     const path = join(workDir, `chunk-${chunkIndex++}.csv`);
-    await writeFile(path, data);
+    await writeFile(path, transform(data));
     try {
       await onChunk(path);
     } finally {
