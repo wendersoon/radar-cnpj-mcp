@@ -1,39 +1,110 @@
-import { createWriteStream } from 'node:fs';
+import { rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { pipeline } from 'node:stream/promises';
+import type { Readable } from 'node:stream';
 import yauzl from 'yauzl';
 
-/** Extracts every file of a ZIP archive into destDir and returns their paths. */
-export async function extractZip(zipPath: string, destDir: string): Promise<string[]> {
+/** End of one quoted record followed by the start of the next one. */
+const RECORD_BOUNDARIES = [Buffer.from('"\n"'), Buffer.from('"\r\n"')];
+
+/**
+ * Returns the offset right after the last line break that separates two CSV
+ * records, or -1 when there is none. Line breaks inside quoted fields are not
+ * boundaries, because every record of the Receita files starts and ends with a quote.
+ */
+export function lastRecordBoundary(data: Buffer): number {
+  let best = -1;
+  for (const boundary of RECORD_BOUNDARIES) {
+    const index = data.lastIndexOf(boundary);
+    if (index >= 0) {
+      best = Math.max(best, index + boundary.length - 1);
+    }
+  }
+  return best;
+}
+
+/**
+ * Streams every file of a ZIP archive and hands it over in temporary chunk
+ * files of roughly chunkBytes, always cut between records. Each chunk is
+ * deleted after onChunk resolves, so disk usage stays bounded no matter how
+ * large the archive is.
+ */
+export async function forEachChunk(
+  zipPath: string,
+  workDir: string,
+  chunkBytes: number,
+  onChunk: (path: string) => Promise<void>,
+): Promise<void> {
   const zip = await yauzl.openPromise(zipPath, { lazyEntries: true });
-  const extracted: string[] = [];
+  let chunkIndex = 0;
+
+  const flush = async (data: Buffer): Promise<void> => {
+    if (data.length === 0) {
+      return;
+    }
+    const path = join(workDir, `chunk-${chunkIndex++}.csv`);
+    await writeFile(path, data);
+    try {
+      await onChunk(path);
+    } finally {
+      await rm(path, { force: true });
+    }
+  };
 
   try {
-    await new Promise<void>((resolve, reject) => {
-      zip.on('error', reject);
-      zip.on('end', () => resolve());
-      zip.on('entry', (entry: yauzl.Entry) => {
-        if (entry.fileName.endsWith('/')) {
-          zip.readEntry();
-          return;
+    for (let entry = await nextEntry(zip); entry; entry = await nextEntry(zip)) {
+      if (entry.fileName.endsWith('/')) {
+        continue;
+      }
+      const stream: Readable = await zip.openReadStreamPromise(entry);
+      let pending: Buffer[] = [];
+      let size = 0;
+
+      for await (const piece of stream as AsyncIterable<Buffer>) {
+        pending.push(piece);
+        size += piece.length;
+        if (size < chunkBytes) {
+          continue;
         }
-        // Flatten names so an archive can never write outside destDir.
-        const name = entry.fileName.replace(/[\\/]/g, '_');
-        const target = join(destDir, `${extracted.length}-${name}`);
-        zip
-          .openReadStreamPromise(entry)
-          .then((stream) => pipeline(stream, createWriteStream(target)))
-          .then(() => {
-            extracted.push(target);
-            zip.readEntry();
-          })
-          .catch(reject);
-      });
-      zip.readEntry();
-    });
+        const data = Buffer.concat(pending);
+        const cut = lastRecordBoundary(data);
+        if (cut < 0) {
+          pending = [data];
+          continue;
+        }
+        await flush(data.subarray(0, cut));
+        const rest = data.subarray(cut);
+        pending = [rest];
+        size = rest.length;
+      }
+      await flush(Buffer.concat(pending));
+    }
   } finally {
     zip.close();
   }
+}
 
-  return extracted;
+function nextEntry(zip: yauzl.ZipFile): Promise<yauzl.Entry | null> {
+  return new Promise((resolve, reject) => {
+    const cleanup = () => {
+      zip.off('entry', onEntry);
+      zip.off('end', onEnd);
+      zip.off('error', onError);
+    };
+    const onEntry = (entry: yauzl.Entry) => {
+      cleanup();
+      resolve(entry);
+    };
+    const onEnd = () => {
+      cleanup();
+      resolve(null);
+    };
+    const onError = (error: Error) => {
+      cleanup();
+      reject(error);
+    };
+    zip.on('entry', onEntry);
+    zip.on('end', onEnd);
+    zip.on('error', onError);
+    zip.readEntry();
+  });
 }

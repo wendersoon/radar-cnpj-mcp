@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readdir, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -47,6 +47,13 @@ describe('import', () => {
     const path = join(workDir, 'all.duckdb');
     const summary = await importDataset({ sourceDir, databasePath: path });
     expect(summary.establishments).toBe(6);
+  });
+
+  it('produces the same data when processing tiny chunks', async () => {
+    const path = join(workDir, 'chunked.duckdb');
+    const summary = await importDataset({ sourceDir, databasePath: path, chunkBytes: 64 });
+    expect(summary.establishments).toBe(6);
+    expect(await readdir(workDir)).not.toContainEqual(expect.stringMatching(/^\.radar-import-/));
   });
 
   it('rejects folders without the required files', async () => {

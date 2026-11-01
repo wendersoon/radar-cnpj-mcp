@@ -1,12 +1,13 @@
 import { mkdir, mkdtemp, readdir, rename, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
 import { UFS } from '../domain/codes.ts';
 import { Database, type SqlParam, sqlLiteral } from './database.ts';
 import { COLUMNS, classifyFile, type FileKind, REQUIRED_KINDS } from './layout.ts';
-import { extractZip } from './zip.ts';
+import { forEachChunk } from './zip.ts';
 
 export const SCHEMA_VERSION = '1';
+
+const DEFAULT_CHUNK_BYTES = 128 * 1024 * 1024;
 
 export interface ImportOptions {
   /** Folder with the monthly ZIP files published by Receita Federal. */
@@ -16,6 +17,10 @@ export interface ImportOptions {
   states?: readonly string[];
   /** Reference month of the data (AAAA-MM). Inferred from sourceDir when omitted. */
   referenceMonth?: string;
+  /** Folder for temporary files. Defaults to the database folder, never /tmp. */
+  tempDir?: string;
+  /** Size of the pieces the CSV files are processed in. */
+  chunkBytes?: number;
   log?: (message: string) => void;
 }
 
@@ -34,8 +39,13 @@ type DatasetFiles = Record<FileKind, string[]>;
 
 /**
  * Imports the Receita Federal ZIP files into a DuckDB database optimized for
- * search. The database is built in a temporary file and swapped in at the end,
- * so a failed import never corrupts the current one.
+ * search.
+ *
+ * The database is built in a temporary file and swapped in at the end, so a
+ * failed import never corrupts the current one. Raw tables live in a separate
+ * staging file that is deleted afterwards, keeping the final database compact,
+ * and archives are processed in bounded chunks so the whole country fits in a
+ * regular disk.
  */
 export async function importDataset(options: ImportOptions): Promise<ImportSummary> {
   const log = options.log ?? (() => {});
@@ -44,19 +54,24 @@ export async function importDataset(options: ImportOptions): Promise<ImportSumma
   const files = await discoverFiles(options.sourceDir);
 
   const tempPath = `${options.databasePath}.importing`;
+  const chunkBytes = options.chunkBytes ?? DEFAULT_CHUNK_BYTES;
+  const tempDir = options.tempDir ?? dirname(options.databasePath);
   await mkdir(dirname(options.databasePath), { recursive: true });
+  await mkdir(tempDir, { recursive: true });
   await removeDatabase(tempPath);
-  const workDir = await mkdtemp(join(tmpdir(), 'radar-cnpj-'));
+  const workDir = await mkdtemp(join(tempDir, '.radar-import-'));
   const db = await Database.open(tempPath);
 
   let establishments: number;
   try {
+    await db.run(`SET temp_directory = ${sqlLiteral(join(workDir, 'spill'))}`);
+    await db.run(`ATTACH ${sqlLiteral(join(workDir, 'staging.duckdb'))} AS raw`);
     await createRawTables(db);
 
     const stateFilter = states.length > 0 ? `WHERE uf IN (${placeholders(states.length)})` : '';
     for (const zip of files.estabelecimentos) {
       log(`Importando ${basename(zip)}...`);
-      await loadZip(db, 'estabelecimentos', zip, workDir, stateFilter, states);
+      await loadZip(db, 'estabelecimentos', zip, workDir, chunkBytes, stateFilter, states);
     }
 
     const companyFilter =
@@ -67,14 +82,14 @@ export async function importDataset(options: ImportOptions): Promise<ImportSumma
       const filter = kind === 'empresas' || kind === 'simples' ? companyFilter : '';
       for (const zip of files[kind]) {
         log(`Importando ${basename(zip)}...`);
-        await loadZip(db, kind, zip, workDir, filter, []);
+        await loadZip(db, kind, zip, workDir, chunkBytes, filter, []);
       }
     }
 
     log('Montando a base de busca...');
-    await buildSearchTables(db);
+    await buildSearchTables(db, log);
     await writeMetadata(db, { states, referenceMonth });
-    await db.run('DROP SCHEMA raw CASCADE');
+    await db.run('DETACH raw');
     await db.run('CHECKPOINT');
 
     const [row] = await db.all<{ total: number }>(
@@ -148,7 +163,6 @@ function placeholders(count: number, start = 1): string {
 }
 
 async function createRawTables(db: Database): Promise<void> {
-  await db.run('CREATE SCHEMA raw');
   for (const [kind, columns] of Object.entries(COLUMNS)) {
     const definition = columns.map((column) => `${column} VARCHAR`).join(', ');
     await db.run(`CREATE TABLE raw.${kind} (${definition})`);
@@ -160,13 +174,13 @@ async function loadZip(
   kind: FileKind,
   zipPath: string,
   workDir: string,
+  chunkBytes: number,
   where: string,
   params: SqlParam[],
 ): Promise<void> {
-  for (const csv of await extractZip(zipPath, workDir)) {
-    await db.run(`INSERT INTO raw.${kind} SELECT * FROM ${readCsv(csv, kind)} ${where}`, params);
-    await rm(csv, { force: true });
-  }
+  await forEachChunk(zipPath, workDir, chunkBytes, (csv) =>
+    db.run(`INSERT INTO raw.${kind} SELECT * FROM ${readCsv(csv, kind)} ${where}`, params),
+  );
 }
 
 function readCsv(path: string, kind: FileKind): string {
@@ -177,9 +191,7 @@ function readCsv(path: string, kind: FileKind): string {
   );
 }
 
-async function buildSearchTables(db: Database): Promise<void> {
-  await db.run(`
-    CREATE TABLE estabelecimentos AS
+const SEARCH_SELECT = `
     SELECT
       e.cnpj_basico || e.cnpj_ordem || e.cnpj_dv AS cnpj,
       e.cnpj_basico,
@@ -221,8 +233,28 @@ async function buildSearchTables(db: Database): Promise<void> {
     LEFT JOIN raw.empresas em ON em.cnpj_basico = e.cnpj_basico
     LEFT JOIN raw.simples s ON s.cnpj_basico = e.cnpj_basico
     LEFT JOIN raw.cnaes c ON c.codigo = e.cnae_fiscal_principal
-    LEFT JOIN raw.municipios m ON m.codigo = e.municipio
-  `);
+    LEFT JOIN raw.municipios m ON m.codigo = e.municipio`;
+
+/**
+ * Builds the search table one state at a time, sorted by city and activity.
+ * Clustering lets DuckDB skip whole blocks when filtering, and building per
+ * state keeps memory and spill space bounded by the largest state.
+ */
+async function buildSearchTables(db: Database, log: (message: string) => void): Promise<void> {
+  await db.run(`CREATE TABLE estabelecimentos AS ${SEARCH_SELECT} LIMIT 0`);
+
+  const states = await db.all<{ uf: string | null }>(
+    'SELECT DISTINCT uf FROM raw.estabelecimentos ORDER BY uf NULLS LAST',
+  );
+  for (const { uf } of states) {
+    log(`Organizando ${uf ?? 'sem UF'}...`);
+    await db.run(
+      `INSERT INTO estabelecimentos ${SEARCH_SELECT}
+       WHERE e.uf IS NOT DISTINCT FROM $1
+       ORDER BY e.municipio, e.cnae_fiscal_principal`,
+      [uf],
+    );
+  }
 
   await db.run(`
     CREATE TABLE cnaes AS
