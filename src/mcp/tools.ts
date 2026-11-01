@@ -23,7 +23,7 @@ export function registerTools(
     {
       title: 'Buscar empresas',
       description:
-        'Lista empresas (estabelecimentos) que atendem aos filtros, com CNPJ, razão social, atividade, endereço e contatos cadastrados na Receita. Retorna também o total de resultados para paginação.',
+        'Lista empresas (estabelecimentos) que atendem aos filtros, com CNPJ, razão social, atividade, endereço e contatos cadastrados na Receita. O campo total é a contagem exata de todas as empresas que atendem aos filtros, sem amostragem nem teto; limite e deslocamento só controlam quais delas vêm na lista.',
       inputSchema: searchShape,
       annotations: READ_ONLY,
     },
@@ -35,7 +35,7 @@ export function registerTools(
     {
       title: 'Contar empresas',
       description:
-        'Conta as empresas que atendem aos filtros, opcionalmente agrupando por UF, município, bairro, CNAE, porte ou ano de abertura. Ideal para dimensionar um mercado.',
+        'Conta as empresas que atendem aos filtros, opcionalmente agrupando por UF, município, bairro, CNAE, porte, MEI ou ano de abertura. As contagens são exatas sobre toda a base importada, sem amostragem nem teto (números redondos são coincidência); maximo_grupos só limita quantos grupos são listados. Ideal para dimensionar um mercado.',
       inputSchema: countShape,
       annotations: READ_ONLY,
     },
