@@ -56,11 +56,11 @@ No Claude Code: `claude mcp add radar-cnpj -- npx -y radar-cnpj-mcp`.
 
 ### Prompts (atalhos)
 
-| Prompt | O que faz |
-| --- | --- |
-| `prospectar` | Encontra e lista empresas de uma atividade numa região |
+| Prompt                | O que faz                                                    |
+| --------------------- | ------------------------------------------------------------ |
+| `prospectar`          | Encontra e lista empresas de uma atividade numa região       |
 | `dimensionar_mercado` | Mostra quantas empresas existem numa UF e onde se concentram |
-| `empresas_novas` | Lista empresas abertas recentemente (padrão: 90 dias) |
+| `empresas_novas`      | Lista empresas abertas recentemente (padrão: 90 dias)        |
 
 No Claude Code, aparecem como comandos: `/radar-cnpj:prospectar`.
 
