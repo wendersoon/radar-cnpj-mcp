@@ -229,6 +229,17 @@ export class CompanyRepository {
     };
   }
 
+  async listCnaes(): Promise<{ codigo: string; descricao: string }[]> {
+    const rows = await this.db.all<{ codigo: string; descricao: string }>(
+      'SELECT codigo, descricao FROM cnaes ORDER BY codigo',
+    );
+    return rows.map((row) => ({ codigo: formatCnae(row.codigo), descricao: row.descricao }));
+  }
+
+  listMunicipalities(uf: string): Promise<{ codigo: string; nome: string; uf: string }[]> {
+    return this.db.all('SELECT codigo, nome, uf FROM municipios WHERE uf = $1 ORDER BY nome', [uf]);
+  }
+
   /** Writes matching companies to a CSV file readable by spreadsheets in pt-BR. */
   async exportCsv(params: ExportParams, path: string, maxRows: number): Promise<number> {
     const where = buildWhere(params);
