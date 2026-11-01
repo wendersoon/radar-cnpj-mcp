@@ -54,6 +54,21 @@ No Claude Code: `claude mcp add radar-cnpj -- npx -y radar-cnpj-mcp`.
 | `exportar_csv`     | Gera uma planilha CSV pronta para o Excel                               |
 | `status_base`      | Informa o mês de referência e as UFs importadas                         |
 
+### Prompts (atalhos)
+
+| Prompt | O que faz |
+| --- | --- |
+| `prospectar` | Encontra e lista empresas de uma atividade numa região |
+| `dimensionar_mercado` | Mostra quantas empresas existem numa UF e onde se concentram |
+| `empresas_novas` | Lista empresas abertas recentemente (padrão: 90 dias) |
+
+No Claude Code, aparecem como comandos: `/radar-cnpj:prospectar`.
+
+### Resources
+
+`radar://status`, `radar://cnaes`, `radar://municipios/{uf}` e `radar://empresa/{cnpj}`,
+para anexar à conversa (no Claude Code, com `@`).
+
 Filtros disponíveis: CNAE (exato ou por prefixo, principal ou secundário), UF, município,
 bairro, CEP, situação cadastral, data de abertura, porte, MEI, matriz/filial, capital
 social e existência de telefone ou e-mail.
