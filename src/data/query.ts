@@ -143,6 +143,8 @@ export const GROUP_EXPRESSIONS: Record<Grouping, string> = {
   municipio: "concat_ws(' - ', municipio, uf)",
   bairro: "concat_ws(' - ', coalesce(bairro, '(sem bairro)'), municipio, uf)",
   cnae: "concat_ws(' - ', cnae_principal, cnae_descricao)",
-  porte: 'porte',
+  // For Receita a MEI is a micro company; report it on its own, as people expect.
+  porte: "CASE WHEN mei THEN 'MEI' ELSE porte END",
+  mei: "CASE WHEN mei THEN 'MEI' ELSE 'NAO MEI' END",
   ano_abertura: 'CAST(year(data_abertura) AS VARCHAR)',
 };

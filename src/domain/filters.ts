@@ -92,14 +92,27 @@ export const searchSchema = z.object(searchShape);
 
 export type SearchParams = z.infer<typeof searchSchema>;
 
-export const GROUPINGS = ['uf', 'municipio', 'bairro', 'cnae', 'porte', 'ano_abertura'] as const;
+export const GROUPINGS = [
+  'uf',
+  'municipio',
+  'bairro',
+  'cnae',
+  'porte',
+  'mei',
+  'ano_abertura',
+] as const;
 
 export type Grouping = (typeof GROUPINGS)[number];
 
 /** Parameters of an aggregated count. */
 export const countShape = {
   ...filterShape,
-  agrupar_por: z.enum(GROUPINGS).optional().describe('Agrupar a contagem por esta dimensão.'),
+  agrupar_por: z
+    .enum(GROUPINGS)
+    .optional()
+    .describe(
+      'Agrupar a contagem por esta dimensão. "porte" mostra os MEIs separados das microempresas; "mei" divide entre MEI e não MEI.',
+    ),
   maximo_grupos: z.number().int().min(1).max(1000).default(50),
 };
 

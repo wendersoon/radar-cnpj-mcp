@@ -185,9 +185,21 @@ describe('count', () => {
     });
   });
 
-  it('labels company sizes', async () => {
+  it('labels company sizes, keeping MEIs apart from micro companies', async () => {
     const result = await repo.count(countSchema.parse({ agrupar_por: 'porte' }));
-    expect(result.grupos?.[0]).toEqual({ grupo: 'MICRO EMPRESA', quantidade: 3 });
+    expect(result.grupos).toEqual([
+      { grupo: 'MICRO EMPRESA', quantidade: 2 },
+      { grupo: 'DEMAIS', quantidade: 1 },
+      { grupo: 'MEI', quantidade: 1 },
+    ]);
+  });
+
+  it('splits MEIs from other companies', async () => {
+    const result = await repo.count(countSchema.parse({ agrupar_por: 'mei' }));
+    expect(result.grupos).toEqual([
+      { grupo: 'NAO MEI', quantidade: 3 },
+      { grupo: 'MEI', quantidade: 1 },
+    ]);
   });
 });
 
