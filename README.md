@@ -12,8 +12,6 @@ direto do seu agente de IA ou do terminal.**
 
 ![Um agente de IA usando o radar-cnpj-mcp para prospectar oficinas mecânicas em Campinas](assets/agente.gif)
 
-<sub>Sessão real de um agente de IA com o radar-cnpj-mcp e a base de outubro de 2026.</sub>
-
 </div>
 
 ## Por que
