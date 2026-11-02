@@ -8,8 +8,9 @@ import { defaultDatabasePath, defaultExportDir } from './config.ts';
 import { importDataset } from './data/importer.ts';
 import { LazyRepositoryProvider } from './data/provider.ts';
 import type { Company } from './data/repository.ts';
-import { searchSchema } from './domain/filters.ts';
+import { countSchema, searchSchema } from './domain/filters.ts';
 import { createServer } from './mcp/server.ts';
+import { countLines } from './output.ts';
 
 const VERSION = (
   JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as {
@@ -31,6 +32,9 @@ Uso:
       --cnae 4520-0/01   --uf SP   --municipio Campinas   --bairro Centro
       --aberta-apos 2025-01-01   --sem-mei   --limite 20   --json
       --csv leads.csv                    grava o resultado num CSV
+  radar-cnpj-mcp contar [filtros]        conta empresas, com os mesmos filtros de buscar
+      --agrupar municipio                uf, municipio, bairro, cnae, porte, mei, ano_abertura
+      --grupos 10                        quantos grupos mostrar
   radar-cnpj-mcp status                  mostra o mês e as UFs importadas
 
 Variáveis de ambiente:
@@ -56,6 +60,8 @@ async function main(argv: string[]): Promise<void> {
       return runImport(args, databasePath);
     case 'buscar':
       return runSearch(args, databasePath);
+    case 'contar':
+      return runCount(args, databasePath);
     case 'status':
       return runStatus(databasePath);
     case '-v':
@@ -126,31 +132,47 @@ async function runImport(args: string[], databasePath: string): Promise<void> {
   );
 }
 
-async function runSearch(args: string[], databasePath: string): Promise<void> {
-  const { values } = parseArgs({
-    args,
-    options: {
-      cnae: { type: 'string', multiple: true },
-      uf: { type: 'string', multiple: true },
-      municipio: { type: 'string', multiple: true },
-      bairro: { type: 'string', multiple: true },
-      'aberta-apos': { type: 'string' },
-      'sem-mei': { type: 'boolean' },
-      limite: { type: 'string', default: '20' },
-      json: { type: 'boolean' },
-      csv: { type: 'string' },
-    },
-  });
+const FILTER_OPTIONS = {
+  cnae: { type: 'string', multiple: true },
+  uf: { type: 'string', multiple: true },
+  municipio: { type: 'string', multiple: true },
+  bairro: { type: 'string', multiple: true },
+  'aberta-apos': { type: 'string' },
+  'sem-mei': { type: 'boolean' },
+  json: { type: 'boolean' },
+} as const;
 
-  const params = searchSchema.parse({
+interface FilterValues {
+  cnae?: string[] | undefined;
+  uf?: string[] | undefined;
+  municipio?: string[] | undefined;
+  bairro?: string[] | undefined;
+  'aberta-apos'?: string | undefined;
+  'sem-mei'?: boolean | undefined;
+}
+
+function filterInput(values: FilterValues): Record<string, unknown> {
+  return {
     cnaes: values.cnae,
     ufs: values.uf?.map((uf) => uf.toUpperCase()),
     municipios: values.municipio,
     bairros: values.bairro,
     aberta_apos: values['aberta-apos'],
     mei: values['sem-mei'] ? 'excluir' : 'incluir',
-    limite: Number(values.limite),
+  };
+}
+
+async function runSearch(args: string[], databasePath: string): Promise<void> {
+  const { values } = parseArgs({
+    args,
+    options: {
+      ...FILTER_OPTIONS,
+      limite: { type: 'string', default: '20' },
+      csv: { type: 'string' },
+    },
   });
+
+  const params = searchSchema.parse({ ...filterInput(values), limite: Number(values.limite) });
 
   const provider = new LazyRepositoryProvider(databasePath);
   try {
@@ -168,6 +190,38 @@ async function runSearch(args: string[], databasePath: string): Promise<void> {
     }
     printTable(result.empresas);
     console.log(`\n${result.empresas.length} de ${result.total.toLocaleString('pt-BR')} empresas.`);
+  } finally {
+    provider.close();
+  }
+}
+
+async function runCount(args: string[], databasePath: string): Promise<void> {
+  const { values } = parseArgs({
+    args,
+    options: {
+      ...FILTER_OPTIONS,
+      agrupar: { type: 'string' },
+      grupos: { type: 'string', default: '10' },
+    },
+  });
+
+  const params = countSchema.parse({
+    ...filterInput(values),
+    agrupar_por: values.agrupar,
+    maximo_grupos: Number(values.grupos),
+  });
+
+  const provider = new LazyRepositoryProvider(databasePath);
+  try {
+    const result = await (await provider.get()).count(params);
+    if (values.json) {
+      console.log(JSON.stringify(result, null, 2));
+      return;
+    }
+    for (const line of countLines(result.grupos ?? [], result.total)) {
+      console.log(line);
+    }
+    console.log(`Total: ${result.total.toLocaleString('pt-BR')} estabelecimentos`);
   } finally {
     provider.close();
   }
