@@ -160,7 +160,7 @@ export async function discoverFiles(sourceDir: string): Promise<DatasetFiles> {
   return files;
 }
 
-function normalizeStates(states: readonly string[]): string[] {
+export function normalizeStates(states: readonly string[]): string[] {
   const normalized = [...new Set(states.map((state) => state.trim().toUpperCase()))];
   const invalid = normalized.filter((state) => !(UFS as readonly string[]).includes(state));
   if (invalid.length > 0) {
@@ -290,7 +290,7 @@ async function buildSearchTables(db: Database, log: (message: string) => void): 
   `);
 }
 
-async function writeMetadata(
+export async function writeMetadata(
   db: Database,
   metadata: { states: string[]; referenceMonth: string | null },
 ): Promise<void> {
@@ -316,7 +316,7 @@ async function removeStaleWorkDirs(tempDir: string, log: (message: string) => vo
   }
 }
 
-async function removeDatabase(path: string): Promise<void> {
+export async function removeDatabase(path: string): Promise<void> {
   await rm(path, { force: true });
   await rm(`${path}.wal`, { force: true });
 }

@@ -1,12 +1,16 @@
 #!/usr/bin/env node
 import { readFileSync } from 'node:fs';
+import { rm } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { ZodError } from 'zod';
 import { defaultDatabasePath, defaultExportDir } from './config.ts';
-import { importDataset } from './data/importer.ts';
+import { Database, sqlLiteral } from './data/database.ts';
+import { downloadDataset } from './data/downloader.ts';
+import { defaultMemoryLimit, importDataset } from './data/importer.ts';
 import { LazyRepositoryProvider } from './data/provider.ts';
+import { exportRelease } from './data/release.ts';
 import type { Company } from './data/repository.ts';
 import { countSchema, searchSchema } from './domain/filters.ts';
 import { createServer } from './mcp/server.ts';
@@ -23,6 +27,8 @@ Encontre empresas por CNAE e região na base pública de CNPJ da Receita Federal
 
 Uso:
   radar-cnpj-mcp                         inicia o servidor MCP (stdio)
+  radar-cnpj-mcp baixar --ufs SP,MG      baixa a base pronta das UFs (recomendado)
+      --mes 2026-10                      mês de referência (padrão: o mais recente)
   radar-cnpj-mcp importar <pasta>        importa os ZIPs do mês baixados da Receita
       --ufs SP,MG                        importa só estas UFs (recomendado)
       --mes 2026-10                      mês de referência (padrão: nome da pasta)
@@ -36,6 +42,7 @@ Uso:
       --agrupar municipio                uf, municipio, bairro, cnae, porte, mei, ano_abertura
       --grupos 10                        quantos grupos mostrar
   radar-cnpj-mcp status                  mostra o mês e as UFs importadas
+  radar-cnpj-mcp exportar-dados <pasta>  gera os arquivos do release mensal (manutenção)
 
 Variáveis de ambiente:
   RADAR_CNPJ_DB          caminho do banco (padrão: ${defaultDatabasePath()})
@@ -56,8 +63,12 @@ async function main(argv: string[]): Promise<void> {
       return serveMcp(databasePath);
     case 'mcp':
       return serveMcp(databasePath);
+    case 'baixar':
+      return runDownload(args, databasePath);
     case 'importar':
       return runImport(args, databasePath);
+    case 'exportar-dados':
+      return runExportRelease(args, databasePath);
     case 'buscar':
       return runSearch(args, databasePath);
     case 'contar':
@@ -91,6 +102,62 @@ async function serveMcp(databasePath: string): Promise<void> {
   await server.connect(new StdioServerTransport());
   // stdout carries the protocol; diagnostics go to stderr only.
   console.error(`radar-cnpj-mcp ${VERSION} pronto (base: ${databasePath})`);
+}
+
+async function runDownload(args: string[], databasePath: string): Promise<void> {
+  const { values } = parseArgs({
+    args,
+    options: { ufs: { type: 'string' }, mes: { type: 'string' }, memoria: { type: 'string' } },
+  });
+  if (!values.ufs) {
+    throw new UsageError('Informe as UFs: radar-cnpj-mcp baixar --ufs SP,MG');
+  }
+  if (values.mes && !/^\d{4}-\d{2}$/.test(values.mes)) {
+    throw new UsageError('Use --mes no formato AAAA-MM');
+  }
+
+  const started = Date.now();
+  const summary = await downloadDataset({
+    databasePath,
+    states: values.ufs.split(',').filter(Boolean),
+    ...(values.mes ? { month: values.mes } : {}),
+    ...(values.memoria ? { memoryLimit: values.memoria } : {}),
+    log: (message) => console.error(message),
+  });
+
+  const seconds = ((Date.now() - started) / 1000).toFixed(0);
+  const megabytes = (summary.downloadedBytes / 1024 / 1024).toFixed(0);
+  console.log(
+    `${summary.establishments.toLocaleString('pt-BR')} estabelecimentos prontos ` +
+      `(UFs: ${summary.states.join(', ')}; mês: ${summary.referenceMonth ?? 'não informado'}; ` +
+      `${megabytes} MB baixados) em ${seconds}s.\nBase: ${summary.databasePath}`,
+  );
+}
+
+async function runExportRelease(args: string[], databasePath: string): Promise<void> {
+  const { values, positionals } = parseArgs({
+    args,
+    allowPositionals: true,
+    options: { memoria: { type: 'string' } },
+  });
+  const [outDir] = positionals;
+  if (!outDir) {
+    throw new UsageError('Informe a pasta de saída: radar-cnpj-mcp exportar-dados <pasta>');
+  }
+  const db = await Database.open(databasePath, { readOnly: true });
+  // Spill files live next to the release folder so they never end up in it.
+  const spill = `${resolve(outDir)}.spill`;
+  try {
+    await db.run(`SET memory_limit = ${sqlLiteral(values.memoria ?? defaultMemoryLimit())}`);
+    await db.run(`SET temp_directory = ${sqlLiteral(spill)}`);
+    const { files, bytes } = await exportRelease(db, resolve(outDir), (message) =>
+      console.error(message),
+    );
+    console.log(`${files} arquivos, ${(bytes / 1024 ** 3).toFixed(2)} GB em ${resolve(outDir)}`);
+  } finally {
+    db.close();
+    await rm(spill, { recursive: true, force: true });
+  }
 }
 
 async function runImport(args: string[], databasePath: string): Promise<void> {
