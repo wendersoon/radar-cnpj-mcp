@@ -14,6 +14,14 @@
   ],
   "license": "MIT",
   "author": "Wenderson Melo",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/wendersoon/radar-cnpj-mcp.git"
+  },
+  "homepage": "https://github.com/wendersoon/radar-cnpj-mcp#readme",
+  "bugs": {
+    "url": "https://github.com/wendersoon/radar-cnpj-mcp/issues"
+  },
   "type": "module",
   "bin": {
     "radar-cnpj-mcp": "dist/cli.js"
