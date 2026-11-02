@@ -110,3 +110,96 @@ describe('municipalityProfile', () => {
     );
   });
 });
+
+describe('compareRegions', () => {
+  const allSectors = { incluir_cnae_secundario: false };
+
+  it('answers "where are there more repair shops: Campinas or Sumaré?"', async () => {
+    const { regioes, cnaes, mes_referencia } = await analytics.compareRegions(
+      [
+        { uf: 'SP', municipio: 'Campinas' },
+        { uf: 'SP', municipio: 'sumaré' },
+      ],
+      { cnaes: ['4520001'], incluir_cnae_secundario: false },
+    );
+
+    expect(mes_referencia).toBe('2026-10');
+    expect(cnaes).toEqual(['4520-0/01']);
+    expect(regioes.map((region) => region.regiao)).toEqual(['CAMPINAS - SP', 'SUMARE - SP']);
+    expect(regioes[0]).toMatchObject({
+      ativas: 1,
+      ativas_na_regiao: 2,
+      participacao_nas_ativas: 50,
+      percentual_mei: 0,
+    });
+    expect(regioes[1]).toMatchObject({
+      ativas: 1,
+      ativas_na_regiao: 1,
+      participacao_nas_ativas: 100,
+      filiais_ativas: 1,
+    });
+  });
+
+  it('compares whole states in every sector', async () => {
+    const { regioes, cnaes } = await analytics.compareRegions(
+      [{ uf: 'SP' }, { uf: 'MG' }],
+      allSectors,
+    );
+    expect(cnaes).toBeNull();
+    expect(regioes.map((region) => [region.regiao, region.ativas])).toEqual([
+      ['SP', 4],
+      ['MG', 1],
+    ]);
+    expect(regioes[1]?.participacao_nas_ativas).toBe(100);
+  });
+
+  it('counts secondary activities only when asked', async () => {
+    const region = [
+      { uf: 'SP' as const, municipio: 'Campinas' },
+      { uf: 'SP' as const, municipio: 'Sumaré' },
+    ];
+    const principal = await analytics.compareRegions(region, {
+      cnaes: ['4520002'],
+      incluir_cnae_secundario: false,
+    });
+    const secondary = await analytics.compareRegions(region, {
+      cnaes: ['4520002'],
+      incluir_cnae_secundario: true,
+    });
+    expect(principal.regioes[0]?.ativas).toBe(1);
+    expect(secondary.regioes[0]?.ativas).toBe(2);
+  });
+
+  it('accepts a code prefix', async () => {
+    const { regioes } = await analytics.compareRegions(
+      [{ uf: 'SP', municipio: 'Campinas' }, { uf: 'MG' }],
+      { cnaes: ['4520'], incluir_cnae_secundario: false },
+    );
+    expect(regioes.map((region) => region.ativas)).toEqual([2, 0]);
+    expect(regioes[1]).toMatchObject({ percentual_mei: null, participacao_nas_ativas: 0 });
+  });
+
+  it('rejects what would look like a misleading zero', async () => {
+    await expect(
+      analytics.compareRegions([{ uf: 'SP', municipio: 'Campinas' }, { uf: 'RJ' }], allSectors),
+    ).rejects.toThrow(/UF não importada: RJ/);
+    await expect(
+      analytics.compareRegions(
+        [
+          { uf: 'SP', municipio: 'Campinas' },
+          { uf: 'SP', municipio: 'Atlantida' },
+        ],
+        allSectors,
+      ),
+    ).rejects.toThrow(/Atlantida.*não encontrado/);
+    await expect(
+      analytics.compareRegions([{ uf: 'SP' }, { uf: 'MG' }], {
+        cnaes: ['9999999'],
+        incluir_cnae_secundario: false,
+      }),
+    ).rejects.toThrow(/CNAE "9999-9\/99" não existe/);
+    await expect(
+      analytics.compareRegions([{ uf: 'SP' }, { uf: 'SP' }], allSectors),
+    ).rejects.toThrow(/repetidas/);
+  });
+});

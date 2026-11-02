@@ -167,6 +167,37 @@ export function registerTools(
   );
 
   server.registerTool(
+    'comparar_regioes',
+    {
+      title: 'Comparar regiões',
+      description:
+        'Compara até 5 municípios ou UFs, no mesmo setor ou em todos: empresas ativas, porte, percentual de MEIs, peso do setor nas ativas da região e aberturas dos últimos 12 meses completos comparadas aos 12 anteriores. Retorna só totais, sem listar empresas.',
+      inputSchema: {
+        regioes: z
+          .array(
+            z.object({
+              uf: z.enum(UFS),
+              municipio: z.string().min(2).optional().describe('Omita para comparar a UF inteira.'),
+            }),
+          )
+          .min(2)
+          .max(5)
+          .describe('Regiões a comparar, ex.: [{"uf":"SP","municipio":"Campinas"},{"uf":"MG"}].'),
+        cnaes: filterShape.cnaes,
+        incluir_cnae_secundario: filterShape.incluir_cnae_secundario,
+      },
+      annotations: READ_ONLY,
+    },
+    ({ regioes, cnaes, incluir_cnae_secundario }) =>
+      run(async () =>
+        (await provider.get()).analytics.compareRegions(regioes, {
+          ...(cnaes ? { cnaes } : {}),
+          incluir_cnae_secundario,
+        }),
+      ),
+  );
+
+  server.registerTool(
     'baixar_dados',
     {
       title: 'Baixar dados da Receita',
