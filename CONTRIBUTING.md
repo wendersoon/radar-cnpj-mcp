@@ -5,8 +5,9 @@ Obrigado pelo interesse! Relatos de bugs, ideias e pull requests são bem-vindos
 ## Antes de começar
 
 - **Bugs e ideias:** abra uma [issue](https://github.com/wendersoon/radar-cnpj-mcp/issues/new/choose).
-- **Problemas de segurança ou de privacidade** (por exemplo, um dado pessoal exposto): não abra
-  issue pública; veja o [SECURITY.md](SECURITY.md).
+- **Vulnerabilidades:** não abra issue pública; veja o [SECURITY.md](SECURITY.md).
+- **Alterar ou remover dados:** o projeto não hospeda dados. A solicitação precisa ser feita à
+  Receita Federal.
 - **Mudanças grandes:** abra uma issue antes, para combinarmos a abordagem.
 - Procurando por onde começar? Veja as issues marcadas com
   [`good first issue`](https://github.com/wendersoon/radar-cnpj-mcp/labels/good%20first%20issue).
@@ -49,9 +50,9 @@ RADAR_CNPJ_DB=/tmp/teste.duckdb node dist/cli.js contar --agrupar municipio
 - Mantenha o PR focado e com testes. Mudanças nas ferramentas MCP devem ser cobertas em
   `test/server.test.ts`.
 - Use consultas parametrizadas: nenhum valor vindo do usuário entra no texto do SQL.
-- **Privacidade:** não exponha dados de pessoas físicas. O projeto não hospeda nem redistribui
-  a base, os dados de sócios não são importados e o CPF que a Receita acrescenta ao nome de
-  empresários individuais é removido. Recursos novos devem seguir essa linha.
+- **Privacidade:** o projeto é só uma interface local. Ele não hospeda nem redistribui a base, os
+  dados de sócios não são importados e o CPF que a Receita acrescenta ao nome de empresários
+  individuais é removido. Recursos novos devem seguir essa linha.
 - O título do PR segue [Conventional Commits](https://www.conventionalcommits.org/pt-br/), em
   inglês e curto: `feat(cli): add --format json to contar`, `fix(data): ...`.
 - O CI (lint, tipos e testes em Linux, macOS e Windows) precisa passar. Os PRs entram por

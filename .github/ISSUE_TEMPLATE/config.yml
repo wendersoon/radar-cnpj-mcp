@@ -1,5 +1,8 @@
 blank_issues_enabled: false
 contact_links:
-  - name: Reportar problema de segurança ou privacidade
+  - name: Reportar vulnerabilidade
     url: https://github.com/wendersoon/radar-cnpj-mcp/security/advisories/new
-    about: Dado pessoal exposto ou vulnerabilidade? Reporte de forma privada.
+    about: Encontrou uma vulnerabilidade no código? Reporte de forma privada.
+  - name: Alterar ou remover dados
+    url: https://github.com/wendersoon/radar-cnpj-mcp/blob/main/SECURITY.md#o-que-esta-pol%C3%ADtica-n%C3%A3o-cobre
+    about: O projeto não hospeda dados. A solicitação precisa ser feita à Receita Federal.
