@@ -6,7 +6,7 @@ body:
     id: problem
     attributes:
       label: Que problema isso resolveria?
-      description: "Ex.: \"quero filtrar empresas por faixa de capital social numa região\"."
+      description: 'Ex.: "quero filtrar empresas por faixa de capital social numa região".'
     validations:
       required: true
   - type: textarea

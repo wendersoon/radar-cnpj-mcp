@@ -12,7 +12,7 @@ body:
     id: what
     attributes:
       label: O que parece errado?
-      description: "Ex.: \"a contagem de oficinas em Campinas não bate com …\". Não inclua CPF ou contatos de pessoas."
+      description: 'Ex.: "a contagem de oficinas em Campinas não bate com …". Não inclua CPF ou contatos de pessoas.'
     validations:
       required: true
   - type: input
