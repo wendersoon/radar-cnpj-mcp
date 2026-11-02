@@ -10,7 +10,9 @@ direto do seu agente de IA ou do terminal.**
 [![Node](https://img.shields.io/badge/node-%3E%3D20-339933?logo=node.js&logoColor=white)](https://nodejs.org)
 [![Licença: MIT](https://img.shields.io/badge/licen%C3%A7a-MIT-blue)](LICENSE)
 
-![Demonstração: contagem de empresas e oficinas mecânicas em São Paulo](assets/demo.gif)
+![Um agente de IA usando o radar-cnpj-mcp para prospectar oficinas mecânicas em Campinas](assets/agente.gif)
+
+<sub>Sessão real de um agente de IA com o radar-cnpj-mcp e a base de outubro de 2026.</sub>
 
 </div>
 
@@ -106,6 +108,8 @@ Code, viram comandos como `/radar-cnpj:prospectar`.
 `radar://empresa/{cnpj}`, para anexar à conversa.
 
 ## No terminal
+
+![Contagem de empresas e oficinas mecânicas em São Paulo pelo terminal](assets/terminal.gif)
 
 ```sh
 npx radar-cnpj-mcp contar --cnae 4520-0/01 --uf SP --agrupar municipio
