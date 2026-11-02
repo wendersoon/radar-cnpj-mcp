@@ -66,6 +66,7 @@ describe('MCP server', () => {
       'buscar_cnae',
       'buscar_empresas',
       'buscar_municipio',
+      'comparar_regioes',
       'contar_empresas',
       'detalhar_empresa',
       'exportar_csv',

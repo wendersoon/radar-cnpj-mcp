@@ -53,6 +53,22 @@ export interface MunicipalityProfile extends RegionSummary {
   }[];
 }
 
+export interface ComparedRegion extends RegionSummary {
+  regiao: string;
+  /** Active establishments of the region, in any sector. */
+  ativas_na_regiao: number;
+  /** Share of the region's active establishments that belong to the sector. */
+  participacao_nas_ativas: number | null;
+}
+
+export interface RegionComparison {
+  mes_referencia: string | null;
+  /** Compared sector; null means every sector. */
+  cnaes: string[] | null;
+  inclui_cnae_secundario: boolean;
+  regioes: ComparedRegion[];
+}
+
 /** Aggregated views of the data. They return totals only, never individual companies. */
 export class Analytics {
   private readonly db: Database;
@@ -107,6 +123,50 @@ export class Analytics {
         quantidade: row.quantidade,
         percentual: percent(row.quantidade, summary.ativas),
       })),
+    };
+  }
+
+  /** Compares the same sector across regions, in the order they were given. */
+  async compareRegions(
+    regions: readonly { uf: Uf; municipio?: string | undefined }[],
+    sector: Pick<Filters, 'cnaes' | 'incluir_cnae_secundario'>,
+  ): Promise<RegionComparison> {
+    await this.assertCnaesExist(sector.cnaes);
+
+    const places: { name: string; region: Partial<Filters> }[] = [];
+    for (const { uf, municipio } of regions) {
+      if (municipio) {
+        const place = await this.resolveMunicipality(municipio, uf);
+        places.push({
+          name: `${place.nome} - ${place.uf}`,
+          region: { ufs: [place.uf], municipios: [place.nome] },
+        });
+      } else {
+        await this.assertStatesImported([uf]);
+        places.push({ name: uf, region: { ufs: [uf] } });
+      }
+    }
+    if (new Set(places.map((place) => place.name)).size < places.length) {
+      throw new AnalyticsError('Há regiões repetidas na comparação.');
+    }
+
+    const compared: ComparedRegion[] = [];
+    for (const { name, region } of places) {
+      const summary = await this.regionSummary({ ...region, ...sector });
+      const allSectors = sector.cnaes ? await this.count(parseFilters(region)) : summary.ativas;
+      compared.push({
+        regiao: name,
+        ...summary,
+        ativas_na_regiao: allSectors,
+        participacao_nas_ativas: percent(summary.ativas, allSectors),
+      });
+    }
+
+    return {
+      mes_referencia: await this.referenceMonth(),
+      cnaes: sector.cnaes?.map(formatCnae) ?? null,
+      inclui_cnae_secundario: sector.incluir_cnae_secundario,
+      regioes: compared,
     };
   }
 
@@ -193,6 +253,40 @@ export class Analytics {
       );
     }
     return first;
+  }
+
+  async assertStatesImported(states: readonly string[]): Promise<void> {
+    const rows = await this.db.all<{ uf: string }>('SELECT DISTINCT uf FROM municipios');
+    const imported = new Set(rows.map((row) => row.uf));
+    const missing = states.filter((state) => !imported.has(state));
+    if (missing.length > 0) {
+      throw new AnalyticsError(
+        `UF não importada: ${missing.join(', ')}. Importadas: ${[...imported].sort().join(', ')}.`,
+      );
+    }
+  }
+
+  async assertCnaesExist(codes: readonly string[] | undefined): Promise<void> {
+    for (const code of codes ?? []) {
+      const [row] = await this.db.all(
+        'SELECT 1 AS existe FROM cnaes WHERE starts_with(codigo, $1) LIMIT 1',
+        [code],
+      );
+      if (!row) {
+        throw new AnalyticsError(
+          `CNAE "${formatCnae(code)}" não existe. Descubra o código com buscar_cnae.`,
+        );
+      }
+    }
+  }
+
+  private async count(filters: Filters): Promise<number> {
+    const where = buildWhere(filters);
+    const [row] = await this.db.all<{ total: number }>(
+      `SELECT count(*)::INTEGER AS total FROM estabelecimentos ${where.sql}`,
+      where.params,
+    );
+    return row?.total ?? 0;
   }
 
   async referenceMonth(): Promise<string | null> {
