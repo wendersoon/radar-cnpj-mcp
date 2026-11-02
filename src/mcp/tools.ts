@@ -146,7 +146,7 @@ export function registerTools(
     {
       title: 'Baixar dados da Receita',
       description:
-        'Baixa os arquivos da Receita Federal e monta a base local, em segundo plano. São cerca de 7 GB de download, mesmo para uma só UF, e o processo pode levar bem mais de uma hora. SUBSTITUI a base atual quando termina: informe todas as UFs desejadas, inclusive as já importadas. Só use depois que o usuário confirmar as UFs e o download. Acompanhe com andamento_download; a base atual continua disponível até o fim.',
+        'Baixa os arquivos da Receita Federal e monta a base local, em segundo plano. São cerca de 7 GB de download, mesmo para uma só UF, e são necessários cerca de 20 GB livres durante o processo, que costuma levar mais de meia hora. SUBSTITUI a base atual quando termina: informe todas as UFs desejadas, inclusive as já importadas. Só use depois que o usuário confirmar as UFs e o download. Acompanhe com andamento_download; a base atual continua disponível até o fim.',
       inputSchema: {
         ufs: z
           .array(z.enum(UFS))
