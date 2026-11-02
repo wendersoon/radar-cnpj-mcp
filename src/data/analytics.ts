@@ -69,6 +69,35 @@ export interface RegionComparison {
   regioes: ComparedRegion[];
 }
 
+export type TrendPeriodicity = 'ano' | 'mes';
+
+export interface TrendPoint {
+  periodo: string;
+  aberturas: number;
+  baixas: number;
+  saldo: number;
+  /** The period is not over in the data, so it is not comparable with the others. */
+  parcial?: true;
+}
+
+export interface SectorTrend extends Comparison {
+  mes_referencia: string | null;
+  periodicidade: TrendPeriodicity;
+  serie: TrendPoint[];
+  aberturas: number;
+  aberturas_periodo_anterior: number;
+  variacao_aberturas_percentual: number | null;
+  baixas: number;
+  baixas_periodo_anterior: number;
+  variacao_baixas_percentual: number | null;
+  observacao: string;
+}
+
+const TREND_NOTE =
+  'Calculado a partir de um único retrato da base. Aberturas incluem empresas que já fecharam. ' +
+  'Baixas contam só quem está baixado hoje, pela data da situação cadastral, e picos podem vir ' +
+  'de baixas feitas em lote pela Receita, não de fechamentos do setor.';
+
 /** Aggregated views of the data. They return totals only, never individual companies. */
 export class Analytics {
   private readonly db: Database;
@@ -170,6 +199,102 @@ export class Analytics {
     };
   }
 
+  /** Openings and closures over time, reconstructed from the dates in the current data. */
+  async sectorTrend(
+    filters: Pick<Filters, 'cnaes' | 'incluir_cnae_secundario' | 'ufs' | 'municipios' | 'mei'>,
+    periodicity: TrendPeriodicity,
+    periods: number,
+  ): Promise<SectorTrend> {
+    await this.assertCnaesExist(filters.cnaes);
+    await this.assertRegions(filters.ufs, filters.municipios);
+
+    const end = await this.dataEnd();
+    const labels = periodLabels(end, periodicity, periods);
+    const start = periodicity === 'ano' ? `${labels[0]}-01-01` : `${labels[0]}-01`;
+    const format = periodicity === 'ano' ? '%Y' : '%Y-%m';
+
+    const where = buildWhere(parseFilters({ ...filters, situacao: 'todas' }));
+    const n = where.params.length;
+    const and = where.sql ? `${where.sql} AND` : 'WHERE';
+    const inRange = (column: string) =>
+      `${column} >= $${n + 1}::DATE AND ${column} < $${n + 2}::DATE`;
+    const series = (column: string, extra = '') =>
+      this.db.all<{ periodo: string; quantidade: number }>(
+        `SELECT strftime(${column}, '${format}') AS periodo, count(*)::INTEGER AS quantidade
+         FROM estabelecimentos ${and} ${inRange(column)} ${extra}
+         GROUP BY periodo`,
+        [...where.params, start, end],
+      );
+    const opened = new Map(
+      (await series('data_abertura')).map((row) => [row.periodo, row.quantidade]),
+    );
+    const closed = new Map(
+      (await series('data_situacao', "AND situacao = '08'")).map((row) => [
+        row.periodo,
+        row.quantidade,
+      ]),
+    );
+
+    const lastIsPartial = periodicity === 'ano' && !end.endsWith('-01-01');
+    const serie = labels.map((periodo, index): TrendPoint => {
+      const aberturas = opened.get(periodo) ?? 0;
+      const baixas = closed.get(periodo) ?? 0;
+      return {
+        periodo,
+        aberturas,
+        baixas,
+        saldo: aberturas - baixas,
+        ...(lastIsPartial && index === labels.length - 1 ? { parcial: true as const } : {}),
+      };
+    });
+
+    const comparison = await this.lastTwelveMonths();
+    const window = (column: string, from: string, to: string, extra = '') =>
+      this.windowCount(and, where.params, column, from, to, extra);
+    const { periodo, periodo_anterior: previous } = comparison;
+    const aberturas = await window('data_abertura', periodo.de, periodo.ate_exclusive);
+    const aberturasAntes = await window('data_abertura', previous.de, previous.ate_exclusive);
+    const closedOnly = "AND situacao = '08'";
+    const baixas = await window('data_situacao', periodo.de, periodo.ate_exclusive, closedOnly);
+    const baixasAntes = await window(
+      'data_situacao',
+      previous.de,
+      previous.ate_exclusive,
+      closedOnly,
+    );
+
+    return {
+      mes_referencia: await this.referenceMonth(),
+      periodicidade: periodicity,
+      serie,
+      ...comparison,
+      aberturas,
+      aberturas_periodo_anterior: aberturasAntes,
+      variacao_aberturas_percentual: variation(aberturas, aberturasAntes),
+      baixas,
+      baixas_periodo_anterior: baixasAntes,
+      variacao_baixas_percentual: variation(baixas, baixasAntes),
+      observacao: TREND_NOTE,
+    };
+  }
+
+  private async windowCount(
+    and: string,
+    params: SqlParam[],
+    column: string,
+    from: string,
+    to: string,
+    extra: string,
+  ): Promise<number> {
+    const n = params.length;
+    const [row] = await this.db.all<{ total: number }>(
+      `SELECT count(*)::INTEGER AS total FROM estabelecimentos
+       ${and} ${column} >= $${n + 1}::DATE AND ${column} < $${n + 2}::DATE ${extra}`,
+      [...params, from, to],
+    );
+    return row?.total ?? 0;
+  }
+
   /** Summarizes the establishments matching the filters; their own situacao is ignored. */
   async regionSummary(filters: Partial<Filters>): Promise<RegionSummary> {
     const comparison = await this.lastTwelveMonths();
@@ -266,6 +391,32 @@ export class Analytics {
     }
   }
 
+  /** Without a state, a repeated name would silently add up different cities. */
+  async assertRegions(
+    states: readonly string[] | undefined,
+    municipalities: readonly string[] | undefined,
+  ): Promise<void> {
+    if (states) {
+      await this.assertStatesImported(states);
+    }
+    for (const name of municipalities ?? []) {
+      if (!states) {
+        await this.resolveMunicipality(name);
+        continue;
+      }
+      const [row] = await this.db.all(
+        `SELECT 1 AS existe FROM municipios
+         WHERE nome_norm = $1 AND uf IN (${states.map((_, i) => `$${i + 2}`).join(', ')}) LIMIT 1`,
+        [normalizeText(name), ...states],
+      );
+      if (!row) {
+        throw new AnalyticsError(
+          `Município "${name}" não encontrado em ${states.join(', ')}. Confira com buscar_municipio.`,
+        );
+      }
+    }
+  }
+
   async assertCnaesExist(codes: readonly string[] | undefined): Promise<void> {
     for (const code of codes ?? []) {
       const [row] = await this.db.all(
@@ -325,6 +476,20 @@ export class Analytics {
 
 function parseFilters(filters: Partial<Filters>): Filters {
   return filterSchema.parse(filters);
+}
+
+/** The last periods with data, oldest first. The data ends before `end`. */
+export function periodLabels(end: string, periodicity: TrendPeriodicity, count: number): string[] {
+  const last = addMonths(end, -1);
+  const labels: string[] = [];
+  for (let i = count - 1; i >= 0; i--) {
+    labels.push(
+      periodicity === 'ano'
+        ? String(Number(last.slice(0, 4)) - i)
+        : addMonths(last, -i).slice(0, 7),
+    );
+  }
+  return labels;
 }
 
 export function addMonths(isoDate: string, months: number): string {

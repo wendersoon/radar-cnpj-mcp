@@ -198,6 +198,45 @@ export function registerTools(
   );
 
   server.registerTool(
+    'tendencia_setor',
+    {
+      title: 'Tendência do setor',
+      description:
+        'Mostra aberturas e baixas por ano ou mês, a partir das datas da base atual, e compara os últimos 12 meses completos aos 12 anteriores. Use para saber se um setor ou região está crescendo. Período marcado como parcial não é comparável aos demais. Retorna só totais, sem listar empresas.',
+      inputSchema: {
+        cnaes: filterShape.cnaes,
+        incluir_cnae_secundario: filterShape.incluir_cnae_secundario,
+        ufs: filterShape.ufs,
+        municipios: filterShape.municipios,
+        mei: filterShape.mei,
+        periodicidade: z.enum(['ano', 'mes']).default('ano'),
+        periodos: z
+          .number()
+          .int()
+          .min(2)
+          .max(120)
+          .optional()
+          .describe('Quantos períodos mostrar. Padrão: 10 anos ou 24 meses.'),
+      },
+      annotations: READ_ONLY,
+    },
+    ({ periodicidade, periodos, ...filters }) =>
+      run(async () => {
+        const { cnaes, ufs, municipios, ...rest } = filters;
+        return (await provider.get()).analytics.sectorTrend(
+          {
+            ...rest,
+            ...(cnaes ? { cnaes } : {}),
+            ...(ufs ? { ufs } : {}),
+            ...(municipios ? { municipios } : {}),
+          },
+          periodicidade,
+          periodos ?? (periodicidade === 'ano' ? 10 : 24),
+        );
+      }),
+  );
+
+  server.registerTool(
     'baixar_dados',
     {
       title: 'Baixar dados da Receita',
