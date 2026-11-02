@@ -41,6 +41,7 @@ Outras ideias:
 - _"Liste academias abertas desde 2025 em Santo André, sem MEI, com telefone."_
 - _"Em quais cidades de SP há mais clínicas odontológicas?"_
 - _"Exporte para CSV os restaurantes do bairro Pinheiros."_
+- _"Como é a economia de Campinas?"_
 
 ## Como usar
 
@@ -146,6 +147,7 @@ Para atualizar a ferramenta: `npm update -g radar-cnpj-mcp`.
 | `detalhar_empresa`   | Mostra todos os dados de um CNPJ                                             |
 | `exportar_csv`       | Gera uma planilha CSV pronta para o Excel                                    |
 | `status_base`        | Informa o mês de referência e as UFs importadas                              |
+| `perfil_municipio`   | Resume a economia de um município: setores, porte, MEIs e aberturas recentes |
 | `baixar_dados`       | Baixa os dados da Receita em segundo plano, a pedido do usuário              |
 | `andamento_download` | Mostra a etapa do download iniciado pelo agente                              |
 

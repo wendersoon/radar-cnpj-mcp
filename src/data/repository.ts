@@ -9,6 +9,7 @@ import {
   normalizeCnpj,
   normalizeText,
 } from '../domain/format.ts';
+import { Analytics } from './analytics.ts';
 import type { Database, SqlParam } from './database.ts';
 import { buildWhere, escapeLike, GROUP_EXPRESSIONS, ORDER_BY } from './query.ts';
 
@@ -117,10 +118,12 @@ const CSV_COLUMNS = [
 
 /** Read access to the imported company data. */
 export class CompanyRepository {
+  readonly analytics: Analytics;
   private readonly db: Database;
 
   constructor(db: Database) {
     this.db = db;
+    this.analytics = new Analytics(db);
   }
 
   async search(params: SearchParams): Promise<SearchResult> {
