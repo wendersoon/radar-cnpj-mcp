@@ -1,0 +1,15 @@
+name: Sugestão
+description: Uma ideia de recurso ou melhoria
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Que problema isso resolveria?
+      description: "Ex.: \"quero filtrar empresas por faixa de capital social numa região\"."
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Como você imagina a solução?

@@ -1,0 +1,36 @@
+name: Bug
+description: Algo não funciona como esperado
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: O que aconteceu?
+      description: Inclua o comando ou o pedido feito ao agente de IA, e a resposta ou o erro.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: O que você esperava?
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Versão do radar-cnpj-mcp
+      placeholder: saída de `npx radar-cnpj-mcp --version`
+    validations:
+      required: true
+  - type: input
+    id: client
+    attributes:
+      label: Agente de IA ou terminal
+      placeholder: "ex.: Claude Code, Claude Desktop, Cursor, terminal"
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Sistema e Node.js
+      placeholder: "ex.: Ubuntu 24.04, Node 24"

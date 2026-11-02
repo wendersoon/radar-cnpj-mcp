@@ -1,0 +1,24 @@
+name: Problema nos dados
+description: Um número, nome ou campo que parece errado
+labels: [dados]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Os dados vêm da Receita Federal e são preenchidos pelas próprias empresas, então podem
+        ter erros na origem. Conte o que encontrou e verificamos se o problema está na
+        importação ou na fonte.
+  - type: textarea
+    id: what
+    attributes:
+      label: O que parece errado?
+      description: "Ex.: \"a contagem de oficinas em Campinas não bate com …\". Não inclua CPF ou contatos de pessoas."
+    validations:
+      required: true
+  - type: input
+    id: month
+    attributes:
+      label: Mês de referência da base
+      placeholder: saída de `npx radar-cnpj-mcp status`
+    validations:
+      required: true
