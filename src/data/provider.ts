@@ -7,8 +7,8 @@ export class DatasetNotFoundError extends Error {
 
   constructor(path: string) {
     super(
-      `Base de dados não encontrada em ${path}. Importe os dados abertos do CNPJ antes: ` +
-        'npx radar-cnpj-mcp importar <pasta-do-mes> --ufs SP',
+      `Base de dados não encontrada em ${path}. Baixe os dados abertos do CNPJ antes: ` +
+        'npx radar-cnpj-mcp baixar --ufs SP',
     );
   }
 }

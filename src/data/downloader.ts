@@ -1,36 +1,31 @@
-import { createHash } from 'node:crypto';
 import { once } from 'node:events';
 import { createWriteStream } from 'node:fs';
-import { mkdir, mkdtemp, readFile, rename, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, readdir, rename, rm, stat, statfs } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
-import { Database, sqlLiteral } from './database.ts';
-import { defaultMemoryLimit, normalizeStates, removeDatabase, writeMetadata } from './importer.ts';
-import {
-  CHECKSUMS_FILE,
-  CNAES_FILE,
-  DEFAULT_DATA_REPO,
-  establishmentsFile,
-  METADATA_FILE,
-  MUNICIPALITIES_FILE,
-  parseChecksums,
-  type ReleaseMetadata,
-  releaseTag,
-} from './release.ts';
+import { importDataset } from './importer.ts';
+import { classifyFile, REQUIRED_KINDS } from './layout.ts';
 
-const USER_AGENT = 'radar-cnpj-mcp';
+/** Public share of Receita Federal, as shown in the browser address bar. */
+export const DEFAULT_SHARE_URL =
+  'https://arquivos.receitafederal.gov.br/index.php/s/gn672Ad4CF8N6TK?dir=/Dados/Cadastros/CNPJ';
+
 const WORK_DIR_PREFIX = '.radar-download-';
+const DOWNLOAD_ATTEMPTS = 3;
+const PARALLEL_DOWNLOADS = 4;
+const SPARE_BYTES = 1024 ** 3;
+const MANUAL_HINT =
+  'Você também pode baixar os arquivos pelo navegador e usar "radar-cnpj-mcp importar"; veja o README.';
 
 export interface DownloadOptions {
   databasePath: string;
-  /** States to download. At least one. */
+  /** States to keep. Empty means the whole country. */
   states: readonly string[];
-  /** Reference month (AAAA-MM). Defaults to the latest release. */
+  /** Reference month (AAAA-MM). Defaults to the latest one published. */
   month?: string;
-  /** GitHub repository holding the releases. */
-  repo?: string;
-  /** GitHub API base URL, overridable for tests. */
-  apiBaseUrl?: string;
-  /** Folder for temporary files. Defaults to the database folder. */
+  /** Link of the Receita Federal share. Defaults to DEFAULT_SHARE_URL. */
+  shareUrl?: string;
+  /** Keeps the ZIP files in this folder, reusing the ones already complete. */
+  keepDir?: string;
   tempDir?: string;
   memoryLimit?: string;
   log?: (message: string) => void;
@@ -40,7 +35,7 @@ export interface DownloadSummary {
   databasePath: string;
   establishments: number;
   states: string[];
-  referenceMonth: string | null;
+  referenceMonth: string;
   downloadedBytes: number;
 }
 
@@ -48,144 +43,197 @@ export class DownloadError extends Error {
   override name = 'DownloadError';
 }
 
-interface ReleaseAsset {
+interface Share {
+  webdavUrl: string;
+  authorization: string;
+}
+
+interface RemoteEntry {
   name: string;
   size: number;
-  browser_download_url: string;
+  isDirectory: boolean;
 }
 
-interface Release {
-  tag_name: string;
-  assets: ReleaseAsset[];
-}
-
-/**
- * Builds the local database from the ready-made Parquet files of the
- * radar-cnpj-dados releases, downloading only the requested states. Every file
- * is checked against SHA256SUMS, and the database is swapped in only at the end.
- */
-export async function downloadDataset(options: DownloadOptions): Promise<DownloadSummary> {
-  const log = options.log ?? (() => {});
-  const states = normalizeStates(options.states);
-  if (states.length === 0) {
-    throw new DownloadError('Informe ao menos uma UF, ex.: --ufs SP');
+/** Turns the share link people see in the browser into its WebDAV endpoint. */
+export function parseShareUrl(shareUrl: string): Share {
+  let url: URL;
+  try {
+    url = new URL(shareUrl);
+  } catch {
+    throw new DownloadError(`Link inválido da Receita Federal: ${shareUrl}`);
   }
-
-  const release = await fetchRelease(options);
-  const assets = new Map(release.assets.map((asset) => [asset.name, asset]));
-  const missing = states.filter((uf) => !assets.has(establishmentsFile(uf)));
-  if (missing.length > 0) {
-    const available = release.assets
-      .map((asset) => /^estabelecimentos-(.+)\.parquet$/.exec(asset.name)?.[1])
-      .filter(Boolean)
-      .join(', ');
+  const token = /\/s\/([^/?]+)/.exec(url.pathname)?.[1];
+  const dir = url.searchParams.get('dir');
+  if (!token || !dir) {
     throw new DownloadError(
-      `UF ${missing.join(', ')} não existe no release ${release.tag_name}. Disponíveis: ${available}.`,
+      `Link inválido da Receita Federal: ${shareUrl}. Use o endereço da pasta do CNPJ no navegador.`,
     );
   }
-  for (const name of [CHECKSUMS_FILE, METADATA_FILE, CNAES_FILE, MUNICIPALITIES_FILE]) {
-    if (!assets.has(name)) {
-      throw new DownloadError(`O release ${release.tag_name} não tem o arquivo ${name}.`);
-    }
+  return {
+    webdavUrl: `${url.origin}/public.php/webdav${dir.replace(/\/$/, '')}`,
+    authorization: `Basic ${Buffer.from(`${token}:`).toString('base64')}`,
+  };
+}
+
+/** Downloads the month's files from Receita Federal and imports the requested states. */
+export async function downloadDataset(options: DownloadOptions): Promise<DownloadSummary> {
+  const log = options.log ?? (() => {});
+  const share = parseShareUrl(options.shareUrl ?? DEFAULT_SHARE_URL);
+
+  const month = options.month ?? (await latestMonth(share));
+  const files = (await listDirectory(share, month)).filter(
+    (entry) => !entry.isDirectory && classifyFile(entry.name),
+  );
+  const missing = REQUIRED_KINDS.filter(
+    (kind) => !files.some((file) => classifyFile(file.name) === kind),
+  );
+  if (missing.length > 0) {
+    throw new DownloadError(`A pasta ${month} da Receita não tem: ${missing.join(', ')}.`);
   }
 
   const tempDir = options.tempDir ?? dirname(options.databasePath);
   await mkdir(tempDir, { recursive: true });
-  const workDir = await mkdtemp(join(tempDir, WORK_DIR_PREFIX));
-  const tempPath = `${options.databasePath}.importing`;
-  await removeDatabase(tempPath);
+  await removeStaleWorkDirs(tempDir);
+  const workDir = options.keepDir ?? (await mkdtemp(join(tempDir, WORK_DIR_PREFIX)));
+  await mkdir(workDir, { recursive: true });
 
   try {
-    log(`Release ${release.tag_name}`);
-    // Filled by the first download; SHA256SUMS itself is not listed in it.
-    let checksums: Map<string, string> | undefined;
-    const fetchAsset = async (name: string): Promise<string> => {
-      const asset = assets.get(name) as ReleaseAsset;
-      log(`Baixando ${name} (${formatBytes(asset.size)})...`);
-      const path = join(workDir, name);
-      const hash = await downloadFile(asset.browser_download_url, path);
-      if (checksums && checksums.get(name) !== hash) {
-        throw new DownloadError(`O arquivo ${name} veio corrompido (SHA-256 não confere).`);
-      }
-      return path;
-    };
+    const pending = await filesToDownload(files, workDir);
+    const bytes = pending.reduce((sum, file) => sum + file.size, 0);
+    await ensureFreeSpace(workDir, bytes);
 
-    checksums = parseChecksums(await readFile(await fetchAsset(CHECKSUMS_FILE), 'utf8'));
-    const metadata = JSON.parse(
-      await readFile(await fetchAsset(METADATA_FILE), 'utf8'),
-    ) as ReleaseMetadata;
-    const cnaes = await fetchAsset(CNAES_FILE);
-    const municipalities = await fetchAsset(MUNICIPALITIES_FILE);
-    const establishments: string[] = [];
-    for (const uf of states) {
-      establishments.push(await fetchAsset(establishmentsFile(uf)));
-    }
+    log(`Mês ${month}: baixando ${pending.length} arquivos da Receita (${formatBytes(bytes)})...`);
+    await inParallel(pending, PARALLEL_DOWNLOADS, async (file) => {
+      await downloadFile(share, month, file, workDir);
+      log(`Baixado ${file.name} (${formatBytes(file.size)})`);
+    });
 
-    log('Montando a base...');
-    const db = await Database.open(tempPath);
-    let total: number;
-    try {
-      await db.run(`SET temp_directory = ${sqlLiteral(join(workDir, 'spill'))}`);
-      await db.run(`SET memory_limit = ${sqlLiteral(options.memoryLimit ?? defaultMemoryLimit())}`);
-      total = await buildDatabase(db, { establishments, cnaes, municipalities, states });
-      await writeMetadata(db, { states, referenceMonth: metadata.mes_referencia });
-      await db.run('CHECKPOINT');
-    } finally {
-      db.close();
-    }
-
-    await removeDatabase(options.databasePath);
-    await rename(tempPath, options.databasePath);
-
-    const downloadedBytes = [CHECKSUMS_FILE, METADATA_FILE, CNAES_FILE, MUNICIPALITIES_FILE]
-      .concat(states.map(establishmentsFile))
-      .reduce((sum, name) => sum + (assets.get(name)?.size ?? 0), 0);
-    return {
+    const summary = await importDataset({
+      sourceDir: workDir,
       databasePath: options.databasePath,
-      establishments: total,
-      states,
-      referenceMonth: metadata.mes_referencia,
-      downloadedBytes,
+      states: options.states,
+      referenceMonth: month,
+      tempDir,
+      ...(options.memoryLimit ? { memoryLimit: options.memoryLimit } : {}),
+      log,
+    });
+    return {
+      databasePath: summary.databasePath,
+      establishments: summary.establishments,
+      states: summary.states,
+      referenceMonth: month,
+      downloadedBytes: bytes,
     };
-  } catch (error) {
-    await removeDatabase(tempPath);
-    throw error;
   } finally {
-    await rm(workDir, { recursive: true, force: true });
+    if (!options.keepDir) {
+      await rm(workDir, { recursive: true, force: true });
+    }
   }
 }
 
-async function fetchRelease(options: DownloadOptions): Promise<Release> {
-  const api = options.apiBaseUrl ?? 'https://api.github.com';
-  const repo = options.repo ?? DEFAULT_DATA_REPO;
-  const path = options.month ? `tags/${releaseTag(options.month)}` : 'latest';
-  const response = await fetch(`${api}/repos/${repo}/releases/${path}`, {
-    headers: { Accept: 'application/vnd.github+json', 'User-Agent': USER_AGENT },
+async function latestMonth(share: Share): Promise<string> {
+  const months = (await listDirectory(share))
+    .filter((entry) => entry.isDirectory && /^\d{4}-\d{2}$/.test(entry.name))
+    .map((entry) => entry.name)
+    .sort();
+  const latest = months.at(-1);
+  if (!latest) {
+    throw new DownloadError(`Nenhum mês encontrado na Receita. ${MANUAL_HINT}`);
+  }
+  return latest;
+}
+
+async function listDirectory(share: Share, month?: string): Promise<RemoteEntry[]> {
+  const url = month ? `${share.webdavUrl}/${month}/` : `${share.webdavUrl}/`;
+  const response = await request(url, {
+    method: 'PROPFIND',
+    headers: { Authorization: share.authorization, Depth: '1' },
   });
-  if (response.status === 404) {
-    throw new DownloadError(
-      options.month
-        ? `Não há dados do mês ${options.month} em ${repo}.`
-        : `Nenhum release de dados encontrado em ${repo}.`,
-    );
+  if (response.status === 404 && month) {
+    throw new DownloadError(`Não há dados do mês ${month} na Receita Federal.`);
   }
   if (!response.ok) {
-    throw new DownloadError(`Falha ao consultar ${repo}: HTTP ${response.status}.`);
+    throw new DownloadError(
+      `A Receita Federal respondeu HTTP ${response.status} ao listar os arquivos. ` +
+        `Se o link mudou, informe o novo em RADAR_CNPJ_RECEITA_URL. ${MANUAL_HINT}`,
+    );
   }
-  return (await response.json()) as Release;
+  return parseListing(await response.text());
 }
 
-/** Streams a URL to disk and returns its SHA-256. */
-async function downloadFile(url: string, path: string): Promise<string> {
-  const response = await fetch(url, { headers: { 'User-Agent': USER_AGENT } });
-  if (!response.ok || !response.body) {
-    throw new DownloadError(`Falha ao baixar ${url}: HTTP ${response.status}.`);
+/** Reads a WebDAV listing, leaving out the folder being listed. */
+export function parseListing(xml: string): RemoteEntry[] {
+  const entries: RemoteEntry[] = [];
+  for (const [block] of xml.matchAll(/<d:response>[\s\S]*?<\/d:response>/g)) {
+    const href = /<d:href>([^<]+)<\/d:href>/.exec(block)?.[1];
+    if (!href) {
+      continue;
+    }
+    const isDirectory = block.includes('<d:collection');
+    const name = decodeURIComponent(href.replace(/\/$/, '').split('/').pop() ?? '');
+    const size = Number(/<d:getcontentlength>(\d+)</.exec(block)?.[1] ?? 0);
+    entries.push({ name, size, isDirectory });
   }
-  const hash = createHash('sha256');
+  return entries.slice(1);
+}
+
+async function filesToDownload(files: RemoteEntry[], dir: string): Promise<RemoteEntry[]> {
+  const pending: RemoteEntry[] = [];
+  for (const file of files) {
+    const local = await stat(join(dir, file.name)).catch(() => null);
+    if (local?.size !== file.size) {
+      pending.push(file);
+    }
+  }
+  return pending;
+}
+
+async function ensureFreeSpace(dir: string, bytes: number): Promise<void> {
+  const { bavail, bsize } = await statfs(dir);
+  const free = bavail * bsize;
+  if (free < bytes + SPARE_BYTES) {
+    throw new DownloadError(
+      `Espaço insuficiente: o download precisa de ${formatBytes(bytes + SPARE_BYTES)} ` +
+        `e há ${formatBytes(free)} livres.`,
+    );
+  }
+}
+
+async function downloadFile(
+  share: Share,
+  month: string,
+  file: RemoteEntry,
+  dir: string,
+): Promise<void> {
+  const target = join(dir, file.name);
+  const partial = `${target}.part`;
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= DOWNLOAD_ATTEMPTS; attempt++) {
+    try {
+      await streamToFile(`${share.webdavUrl}/${month}/${file.name}`, share, partial);
+      const { size } = await stat(partial);
+      if (size !== file.size) {
+        throw new DownloadError(`${file.name} veio incompleto (${size} de ${file.size} bytes).`);
+      }
+      await rename(partial, target);
+      return;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  await rm(partial, { force: true });
+  const reason = lastError instanceof Error ? lastError.message : String(lastError);
+  throw new DownloadError(`Falha ao baixar ${file.name}: ${reason} ${MANUAL_HINT}`);
+}
+
+async function streamToFile(url: string, share: Share, path: string): Promise<void> {
+  const response = await request(url, { headers: { Authorization: share.authorization } });
+  if (!response.ok || !response.body) {
+    throw new DownloadError(`HTTP ${response.status}.`);
+  }
   const out = createWriteStream(path);
   try {
     for await (const chunk of response.body as AsyncIterable<Uint8Array>) {
-      hash.update(chunk);
       if (!out.write(chunk)) {
         await once(out, 'drain');
       }
@@ -194,54 +242,43 @@ async function downloadFile(url: string, path: string): Promise<string> {
     out.end();
     await once(out, 'finish');
   }
-  return hash.digest('hex');
 }
 
-async function buildDatabase(
-  db: Database,
-  files: { establishments: string[]; cnaes: string; municipalities: string; states: string[] },
-): Promise<number> {
-  // Each state's file is already sorted by city and activity; loading them in
-  // order keeps the table clustered for fast filtering.
-  const first = files.establishments[0] as string;
-  await db.run(
-    `CREATE TABLE estabelecimentos AS SELECT * FROM (${normalizedSelect(first)}) LIMIT 0`,
-  );
-  for (const file of files.establishments) {
-    await db.run(`INSERT INTO estabelecimentos ${normalizedSelect(file)}`);
+async function request(url: string, init: RequestInit): Promise<Response> {
+  try {
+    return await fetch(url, init);
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    throw new DownloadError(`Não foi possível acessar a Receita Federal (${reason}). ${MANUAL_HINT}`);
   }
-
-  await db.run(
-    `CREATE TABLE cnaes AS
-     SELECT codigo, descricao, strip_accents(upper(descricao)) AS descricao_norm
-     FROM read_parquet(${sqlLiteral(files.cnaes)})`,
-  );
-  await db.run(
-    `CREATE TABLE municipios AS
-     SELECT codigo, nome, strip_accents(upper(coalesce(trim(nome), ''))) AS nome_norm, uf
-     FROM read_parquet(${sqlLiteral(files.municipalities)})
-     WHERE uf IN (${files.states.map(sqlLiteral).join(', ')})`,
-  );
-
-  const [row] = await db.all<{ total: number }>(
-    'SELECT count(*)::INTEGER AS total FROM estabelecimentos',
-  );
-  return row?.total ?? 0;
 }
 
-function normalizedSelect(file: string): string {
-  return `SELECT *,
-    strip_accents(upper(coalesce(trim(bairro), ''))) AS bairro_norm,
-    strip_accents(upper(coalesce(trim(municipio), ''))) AS municipio_norm
-  FROM read_parquet(${sqlLiteral(file)})`;
+async function inParallel<T>(
+  items: T[],
+  limit: number,
+  worker: (item: T) => Promise<void>,
+): Promise<void> {
+  const queue = [...items];
+  await Promise.all(
+    Array.from({ length: limit }, async () => {
+      for (let item = queue.shift(); item; item = queue.shift()) {
+        await worker(item);
+      }
+    }),
+  );
+}
+
+async function removeStaleWorkDirs(dir: string): Promise<void> {
+  for (const name of await readdir(dir)) {
+    if (name.startsWith(WORK_DIR_PREFIX)) {
+      await rm(join(dir, name), { recursive: true, force: true });
+    }
+  }
 }
 
 function formatBytes(bytes: number): string {
   if (bytes >= 1024 ** 3) {
     return `${(bytes / 1024 ** 3).toFixed(1).replace('.', ',')} GB`;
   }
-  if (bytes >= 1024 ** 2) {
-    return `${(bytes / 1024 ** 2).toFixed(0)} MB`;
-  }
-  return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+  return `${Math.max(1, Math.round(bytes / 1024 ** 2))} MB`;
 }

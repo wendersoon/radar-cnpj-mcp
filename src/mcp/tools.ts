@@ -82,13 +82,13 @@ export function registerTools(
         'Mostra todos os dados de um estabelecimento pelo CNPJ, incluindo atividades secundárias.',
       inputSchema: {
         cnpj: z.string().min(14).describe('CNPJ com ou sem pontuação.'),
-        incluir_contatos_mei: searchShape.incluir_contatos_mei,
+        ocultar_contatos_mei: searchShape.ocultar_contatos_mei,
       },
       annotations: READ_ONLY,
     },
-    ({ cnpj, incluir_contatos_mei }) =>
+    ({ cnpj, ocultar_contatos_mei }) =>
       run(async () => {
-        const company = await (await provider.get()).getCompany(cnpj, incluir_contatos_mei);
+        const company = await (await provider.get()).getCompany(cnpj, ocultar_contatos_mei);
         if (!company) {
           throw new Error(`CNPJ ${cnpj} não encontrado nas UFs importadas.`);
         }
@@ -104,7 +104,7 @@ export function registerTools(
       inputSchema: {
         ...filterShape,
         ordenar_por: z.enum(SORT_ORDERS).default('mais_recentes'),
-        incluir_contatos_mei: searchShape.incluir_contatos_mei,
+        ocultar_contatos_mei: searchShape.ocultar_contatos_mei,
         arquivo: z
           .string()
           .regex(/^[\w.-]+\.csv$/, 'Use apenas um nome de arquivo terminado em .csv, sem pastas.')
