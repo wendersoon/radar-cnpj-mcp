@@ -251,7 +251,7 @@ describe('lookups', () => {
 
 describe('export', () => {
   it('writes a spreadsheet-friendly CSV', async () => {
-    const path = join(workDir, 'leads.csv');
+    const path = join(workDir, 'empresas.csv');
     const params = searchSchema.parse({ cnaes: ['4520'] });
     expect(await repo.exportCsv(params, path, 10)).toBe(3);
 

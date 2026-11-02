@@ -138,8 +138,8 @@ A importação lê todos os arquivos da Receita, então leva alguns minutos mesm
 CEP, situação cadastral, data de abertura, porte, MEI, matriz/filial, capital social e
 existência de telefone ou e-mail.
 
-**Atalhos (prompts):** `prospectar`, `dimensionar_mercado` e `empresas_novas`. No Claude
-Code, viram comandos como `/radar-cnpj:prospectar`.
+**Atalhos (prompts):** `consultar_empresas`, `panorama_setor` e `empresas_recentes`. No Claude
+Code, viram comandos como `/radar-cnpj:consultar_empresas`.
 
 **Resources:** `radar://status`, `radar://cnaes`, `radar://municipios/{uf}` e
 `radar://empresa/{cnpj}`, para anexar à conversa.
@@ -159,9 +159,9 @@ npx radar-cnpj-mcp --help
 ## Privacidade
 
 Os dados são públicos e ficam só na sua máquina. Por padrão, **telefone e e-mail de MEIs
-ficam ocultos**, porque costumam ser os da própria pessoa física. Ao prospectar, respeite a
-LGPD: aborde empresas com ofertas ligadas à atividade delas e ofereça uma forma de não
-serem mais contatadas.
+ficam ocultos**, porque costumam ser os da própria pessoa física. Ao usar os dados para
+contatar empresas, respeite a LGPD: faça ofertas ligadas à atividade delas e ofereça uma forma
+de não serem mais contatadas.
 
 ## Desenvolvimento
 
@@ -181,3 +181,15 @@ Contribuições são bem-vindas! Veja o [CONTRIBUTING.md](CONTRIBUTING.md).
 
 [MIT](LICENSE). Dados: [Receita Federal do Brasil – Dados Abertos do
 CNPJ](https://arquivos.receitafederal.gov.br/).
+
+## LGPD
+
+O radar-cnpj-mcp foi feito com a LGPD em mente:
+
+- usa a base pública de CNPJ publicada pela Receita Federal e não inclui os dados de sócios;
+- remove dos dados os números em formato de CPF;
+- mantém ocultos o telefone e o e-mail de MEIs, que não são publicados nos dados prontos.
+
+A razão social de MEIs e empresários individuais pode conter o nome da pessoa, como consta na
+base da Receita. Cada usuário é responsável por usar os dados de acordo com a LGPD. Este aviso
+não é um parecer jurídico.

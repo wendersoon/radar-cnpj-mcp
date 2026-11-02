@@ -15,7 +15,7 @@ const INSTRUCTIONS = `Busca empresas brasileiras na base pública de CNPJ da Rec
 Fluxo recomendado:
 1. Use buscar_cnae para transformar a atividade descrita pelo usuário em códigos CNAE.
 2. Use buscar_municipio quando houver dúvida sobre o nome de uma cidade.
-3. Use contar_empresas (com agrupar_por) para dimensionar o mercado antes de listar.
+3. Use contar_empresas (com agrupar_por) para ver os totais antes de listar.
 4. Use buscar_empresas para listar e exportar_csv para entregar listas grandes.
 
 Por padrão só empresas ATIVAS são consideradas e os contatos de MEIs ficam ocultos (LGPD).
