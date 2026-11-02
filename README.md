@@ -46,12 +46,33 @@ Outras ideias:
 
 Requer [Node.js](https://nodejs.org) 20 ou superior.
 
-**1. Baixe a base das UFs que interessam.** Só as UFs pedidas, em segundos, a partir da base
-pronta do [radar-cnpj-dados](https://github.com/wendersoon/radar-cnpj-dados):
+**1. Baixe os dados da Receita Federal.** O comando busca os arquivos do mês mais recente direto
+da Receita e monta a base na sua máquina, só com as UFs pedidas. O projeto não hospeda nem
+redistribui os dados.
 
 ```sh
 npx -y radar-cnpj-mcp baixar --ufs SP,MG
 ```
+
+São cerca de 7 GB de download, mesmo para uma só UF, porque a Receita não separa os arquivos por
+estado. Os arquivos baixados são apagados ao final; para guardá-los, use
+`--manter-arquivos <pasta>`. Para o Brasil inteiro, troque `--ufs` por `--todas`.
+
+<details>
+<summary><b>Prefere baixar pelo navegador?</b></summary>
+
+1. Abra a [pasta do CNPJ na Receita Federal](https://arquivos.receitafederal.gov.br/index.php/s/gn672Ad4CF8N6TK?dir=/Dados/Cadastros/CNPJ)
+   e entre na pasta do mês mais recente (por exemplo, `2026-10`).
+2. Baixe, para uma mesma pasta, os arquivos `Estabelecimentos*.zip`, `Empresas*.zip`,
+   `Simples.zip`, `Cnaes.zip` e `Municipios.zip`. Não é preciso descompactar. Os demais, como
+   `Socios*.zip`, não são usados.
+3. Importe a pasta:
+
+```sh
+npx -y radar-cnpj-mcp importar ~/Downloads/2026-10 --ufs SP,MG
+```
+
+</details>
 
 **2. Conecte ao seu agente de IA.**
 
@@ -107,21 +128,6 @@ claude mcp add radar-cnpj -- radar-cnpj-mcp
 
 Para atualizar a ferramenta: `npm update -g radar-cnpj-mcp`.
 
-<details>
-<summary><b>Importar direto da Receita Federal</b></summary>
-
-Para usar um mês que ainda não está no radar-cnpj-dados, baixe a pasta do mês em
-[arquivos.receitafederal.gov.br](https://arquivos.receitafederal.gov.br/) (**Dados › Cadastros ›
-CNPJ**, cerca de 7 GB) e importe:
-
-```sh
-npx -y radar-cnpj-mcp importar ~/Downloads/2026-10 --ufs SP,MG
-```
-
-A importação lê todos os arquivos da Receita, então leva alguns minutos mesmo para uma só UF.
-
-</details>
-
 ## O que o agente ganha
 
 | Ferramenta         | O que faz                                                                    |
@@ -158,10 +164,11 @@ npx radar-cnpj-mcp --help
 
 ## Privacidade
 
-Os dados são públicos e ficam só na sua máquina. Por padrão, **telefone e e-mail de MEIs
-ficam ocultos**, porque costumam ser os da própria pessoa física. Ao usar os dados para
-contatar empresas, respeite a LGPD: faça ofertas ligadas à atividade delas e ofereça uma forma
-de não serem mais contatadas.
+Os dados vêm direto da Receita Federal e ficam na sua máquina. Se o seu agente de IA roda na
+nuvem, os resultados das consultas são enviados ao provedor dele. Telefone e e-mail de MEIs
+costumam ser os da própria pessoa física: para ocultá-los, peça ao agente ou use
+`--ocultar-contatos-mei` no terminal. Ao usar os dados para contatar empresas, respeite a LGPD:
+faça ofertas ligadas à atividade delas e ofereça uma forma de não serem mais contatadas.
 
 ## Desenvolvimento
 
@@ -186,10 +193,12 @@ CNPJ](https://arquivos.receitafederal.gov.br/).
 
 O radar-cnpj-mcp foi feito com a LGPD em mente:
 
-- usa a base pública de CNPJ publicada pela Receita Federal e não inclui os dados de sócios;
-- remove dos dados os números em formato de CPF;
-- mantém ocultos o telefone e o e-mail de MEIs, que não são publicados nos dados prontos.
+- não hospeda nem redistribui dados: cada usuário baixa a base pública de CNPJ da Receita
+  Federal para a própria máquina;
+- não importa os dados de sócios;
+- remove na importação os números em formato de CPF, o que reduz mas não garante a ausência de
+  todos, já que os campos da Receita são texto livre.
 
-A razão social de MEIs e empresários individuais pode conter o nome da pessoa, como consta na
-base da Receita. Cada usuário é responsável por usar os dados de acordo com a LGPD. Este aviso
+A razão social de MEIs e empresários individuais pode conter o nome da pessoa, e os contatos de
+MEIs costumam ser os dela, como constam na base da Receita. Cada usuário é responsável por usar os dados de acordo com a LGPD. Este aviso
 não é um parecer jurídico.

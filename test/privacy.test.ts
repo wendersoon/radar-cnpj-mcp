@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { Database } from '../src/data/database.ts';
-import { emailWithoutCpf, withoutCpf } from '../src/data/privacy.ts';
+import { emailWithoutCpf, nameWithoutCpf, withoutCpf } from '../src/data/privacy.ts';
 
 let db: Database;
 
@@ -16,6 +16,32 @@ async function clean(value: string | null): Promise<string | null> {
   ]);
   return row?.v ?? null;
 }
+
+describe('nameWithoutCpf', () => {
+  it.each([
+    ['JOAO 123,456,789-00', 'JOAO'],
+    ['JOAO 123.456.789 -00', 'JOAO'],
+    ['JOAO 123.456..789-00', 'JOAO'],
+    ['JOAO 123. 456. 789-00', 'JOAO'],
+    ['JOAO 123.456.789,00 ME', 'JOAO ME'],
+    ['JOAO 123.456/789-00', 'JOAO'],
+  ])('cleans %s', async (input, expected) => {
+    const [row] = await db.all<{ v: string }>(`SELECT ${nameWithoutCpf('$1::VARCHAR')} AS v`, [
+      input,
+    ]);
+    expect(row?.v).toBe(expected);
+  });
+
+  it.each(['12.345.678/0001-90 COMERCIO', '51.039.736 MARCIO', 'LOJA (11) 98765-4321'])(
+    'keeps %s',
+    async (input) => {
+      const [row] = await db.all<{ v: string }>(`SELECT ${nameWithoutCpf('$1::VARCHAR')} AS v`, [
+        input,
+      ]);
+      expect(row?.v).toBe(input);
+    },
+  );
+});
 
 describe('withoutCpf', () => {
   it.each([

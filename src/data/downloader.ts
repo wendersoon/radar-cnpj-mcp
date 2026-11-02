@@ -1,7 +1,9 @@
-import { once } from 'node:events';
 import { createWriteStream } from 'node:fs';
 import { mkdir, mkdtemp, readdir, rename, rm, stat, statfs } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
+import { Readable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
+import type { ReadableStream } from 'node:stream/web';
 import { importDataset } from './importer.ts';
 import { classifyFile, REQUIRED_KINDS } from './layout.ts';
 
@@ -80,21 +82,14 @@ export async function downloadDataset(options: DownloadOptions): Promise<Downloa
   const log = options.log ?? (() => {});
   const share = parseShareUrl(options.shareUrl ?? DEFAULT_SHARE_URL);
 
-  const month = options.month ?? (await latestMonth(share));
-  const files = (await listDirectory(share, month)).filter(
-    (entry) => !entry.isDirectory && classifyFile(entry.name),
-  );
-  const missing = REQUIRED_KINDS.filter(
-    (kind) => !files.some((file) => classifyFile(file.name) === kind),
-  );
-  if (missing.length > 0) {
-    throw new DownloadError(`A pasta ${month} da Receita não tem: ${missing.join(', ')}.`);
-  }
+  const { month, files } = await withManualHint(() => listMonth(share, options.month));
 
   const tempDir = options.tempDir ?? dirname(options.databasePath);
   await mkdir(tempDir, { recursive: true });
   await removeStaleWorkDirs(tempDir);
-  const workDir = options.keepDir ?? (await mkdtemp(join(tempDir, WORK_DIR_PREFIX)));
+  const workDir = options.keepDir
+    ? join(options.keepDir, month)
+    : await mkdtemp(join(tempDir, WORK_DIR_PREFIX));
   await mkdir(workDir, { recursive: true });
 
   try {
@@ -103,10 +98,12 @@ export async function downloadDataset(options: DownloadOptions): Promise<Downloa
     await ensureFreeSpace(workDir, bytes);
 
     log(`Mês ${month}: baixando ${pending.length} arquivos da Receita (${formatBytes(bytes)})...`);
-    await inParallel(pending, PARALLEL_DOWNLOADS, async (file) => {
-      await downloadFile(share, month, file, workDir);
-      log(`Baixado ${file.name} (${formatBytes(file.size)})`);
-    });
+    await withManualHint(() =>
+      inParallel(pending, PARALLEL_DOWNLOADS, async (file) => {
+        await downloadFile(share, month, file, workDir);
+        log(`Baixado ${file.name} (${formatBytes(file.size)})`);
+      }),
+    );
 
     const summary = await importDataset({
       sourceDir: workDir,
@@ -131,6 +128,34 @@ export async function downloadDataset(options: DownloadOptions): Promise<Downloa
   }
 }
 
+async function listMonth(
+  share: Share,
+  requested: string | undefined,
+): Promise<{ month: string; files: RemoteEntry[] }> {
+  const month = requested ?? (await latestMonth(share));
+  const files = (await listDirectory(share, month)).filter(
+    (entry) => !entry.isDirectory && classifyFile(entry.name),
+  );
+  const missing = REQUIRED_KINDS.filter(
+    (kind) => !files.some((file) => classifyFile(file.name) === kind),
+  );
+  if (missing.length > 0) {
+    throw new DownloadError(`A pasta ${month} da Receita não tem: ${missing.join(', ')}.`);
+  }
+  return { month, files };
+}
+
+async function withManualHint<T>(action: () => Promise<T>): Promise<T> {
+  try {
+    return await action();
+  } catch (error) {
+    if (error instanceof DownloadError) {
+      throw new DownloadError(`${error.message} ${MANUAL_HINT}`);
+    }
+    throw error;
+  }
+}
+
 async function latestMonth(share: Share): Promise<string> {
   const months = (await listDirectory(share))
     .filter((entry) => entry.isDirectory && /^\d{4}-\d{2}$/.test(entry.name))
@@ -138,7 +163,7 @@ async function latestMonth(share: Share): Promise<string> {
     .sort();
   const latest = months.at(-1);
   if (!latest) {
-    throw new DownloadError(`Nenhum mês encontrado na Receita. ${MANUAL_HINT}`);
+    throw new DownloadError('Nenhum mês encontrado na Receita Federal.');
   }
   return latest;
 }
@@ -155,7 +180,7 @@ async function listDirectory(share: Share, month?: string): Promise<RemoteEntry[
   if (!response.ok) {
     throw new DownloadError(
       `A Receita Federal respondeu HTTP ${response.status} ao listar os arquivos. ` +
-        `Se o link mudou, informe o novo em RADAR_CNPJ_RECEITA_URL. ${MANUAL_HINT}`,
+        'Se o link mudou, informe o novo em RADAR_CNPJ_RECEITA_URL.',
     );
   }
   return parseListing(await response.text());
@@ -223,7 +248,7 @@ async function downloadFile(
   }
   await rm(partial, { force: true });
   const reason = lastError instanceof Error ? lastError.message : String(lastError);
-  throw new DownloadError(`Falha ao baixar ${file.name}: ${reason} ${MANUAL_HINT}`);
+  throw new DownloadError(`Falha ao baixar ${file.name}: ${reason}`);
 }
 
 async function streamToFile(url: string, share: Share, path: string): Promise<void> {
@@ -231,17 +256,7 @@ async function streamToFile(url: string, share: Share, path: string): Promise<vo
   if (!response.ok || !response.body) {
     throw new DownloadError(`HTTP ${response.status}.`);
   }
-  const out = createWriteStream(path);
-  try {
-    for await (const chunk of response.body as AsyncIterable<Uint8Array>) {
-      if (!out.write(chunk)) {
-        await once(out, 'drain');
-      }
-    }
-  } finally {
-    out.end();
-    await once(out, 'finish');
-  }
+  await pipeline(Readable.fromWeb(response.body as ReadableStream), createWriteStream(path));
 }
 
 async function request(url: string, init: RequestInit): Promise<Response> {
@@ -249,7 +264,7 @@ async function request(url: string, init: RequestInit): Promise<Response> {
     return await fetch(url, init);
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
-    throw new DownloadError(`Não foi possível acessar a Receita Federal (${reason}). ${MANUAL_HINT}`);
+    throw new DownloadError(`Não foi possível acessar a Receita Federal (${reason}).`);
   }
 }
 
@@ -259,13 +274,24 @@ async function inParallel<T>(
   worker: (item: T) => Promise<void>,
 ): Promise<void> {
   const queue = [...items];
-  await Promise.all(
+  // Waits for every worker, so nothing is still writing when the caller cleans up.
+  const results = await Promise.allSettled(
     Array.from({ length: limit }, async () => {
       for (let item = queue.shift(); item; item = queue.shift()) {
-        await worker(item);
+        try {
+          await worker(item);
+        } catch (error) {
+          queue.length = 0;
+          throw error;
+        }
       }
     }),
   );
+  for (const result of results) {
+    if (result.status === 'rejected') {
+      throw result.reason;
+    }
+  }
 }
 
 async function removeStaleWorkDirs(dir: string): Promise<void> {
