@@ -4,6 +4,7 @@ import { basename, dirname, join } from 'node:path';
 import { UFS } from '../domain/codes.ts';
 import { Database, type SqlParam, sqlLiteral } from './database.ts';
 import { COLUMNS, classifyFile, type FileKind, REQUIRED_KINDS } from './layout.ts';
+import { emailWithoutCpf, withoutCpf } from './privacy.ts';
 import { forEachChunk, latin1ToUtf8 } from './zip.ts';
 
 export const SCHEMA_VERSION = '1';
@@ -210,12 +211,18 @@ function readCsv(path: string, kind: FileKind): string {
   );
 }
 
+const ADDRESS = `NULLIF(concat_ws(', ',
+        NULLIF(trim(concat_ws(' ', NULLIF(trim(e.tipo_logradouro), ''), NULLIF(trim(e.logradouro), ''))), ''),
+        NULLIF(trim(e.numero), ''),
+        NULLIF(trim(e.complemento), '')
+      ), '')`;
+
 const SEARCH_SELECT = `
     SELECT
       e.cnpj_basico || e.cnpj_ordem || e.cnpj_dv AS cnpj,
       e.cnpj_basico,
       e.identificador_matriz_filial = '1' AS matriz,
-      NULLIF(regexp_replace(trim(e.nome_fantasia), '\\s*\\d{11}$', ''), '') AS nome_fantasia,
+      ${withoutCpf("NULLIF(trim(e.nome_fantasia), '')")} AS nome_fantasia,
       e.situacao_cadastral AS situacao,
       try_strptime(e.data_situacao_cadastral, '%Y%m%d')::DATE AS data_situacao,
       try_strptime(e.data_inicio_atividade, '%Y%m%d')::DATE AS data_abertura,
@@ -225,13 +232,9 @@ const SEARCH_SELECT = `
         WHEN coalesce(trim(e.cnae_fiscal_secundaria), '') = '' THEN []::VARCHAR[]
         ELSE string_split(e.cnae_fiscal_secundaria, ',')
       END AS cnaes_secundarios,
-      NULLIF(concat_ws(', ',
-        NULLIF(trim(concat_ws(' ', NULLIF(trim(e.tipo_logradouro), ''), NULLIF(trim(e.logradouro), ''))), ''),
-        NULLIF(trim(e.numero), ''),
-        NULLIF(trim(e.complemento), '')
-      ), '') AS endereco,
-      NULLIF(trim(e.bairro), '') AS bairro,
-      strip_accents(upper(coalesce(trim(e.bairro), ''))) AS bairro_norm,
+      ${withoutCpf(ADDRESS)} AS endereco,
+      ${withoutCpf("NULLIF(trim(e.bairro), '')")} AS bairro,
+      strip_accents(upper(coalesce(${withoutCpf("NULLIF(trim(e.bairro), '')")}, ''))) AS bairro_norm,
       NULLIF(trim(e.cep), '') AS cep,
       e.uf,
       e.municipio AS municipio_codigo,
@@ -241,9 +244,8 @@ const SEARCH_SELECT = `
       NULLIF(trim(e.telefone_1), '') AS telefone_1,
       NULLIF(trim(e.ddd_2), '') AS ddd_2,
       NULLIF(trim(e.telefone_2), '') AS telefone_2,
-      NULLIF(lower(trim(e.correio_eletronico)), '') AS email,
-      -- Receita appends the owner's CPF to the name of sole proprietors; drop it (LGPD).
-      NULLIF(regexp_replace(trim(em.razao_social), '\\s*\\d{11}$', ''), '') AS razao_social,
+      ${emailWithoutCpf("NULLIF(lower(trim(e.correio_eletronico)), '')")} AS email,
+      ${withoutCpf("NULLIF(trim(em.razao_social), '')")} AS razao_social,
       em.natureza_juridica,
       TRY_CAST(replace(em.capital_social, ',', '.') AS DOUBLE) AS capital_social,
       em.porte_empresa AS porte,
