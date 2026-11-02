@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Reportar problema de segurança ou privacidade
+    url: https://github.com/wendersoon/radar-cnpj-mcp/security/advisories/new
+    about: Dado pessoal exposto ou vulnerabilidade? Reporte de forma privada.
+  - name: Dados prontos por UF (radar-cnpj-dados)
+    url: https://github.com/wendersoon/radar-cnpj-dados
+    about: Dúvidas sobre os arquivos Parquet mensais.
