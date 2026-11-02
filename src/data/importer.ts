@@ -4,7 +4,7 @@ import { basename, dirname, join } from 'node:path';
 import { UFS } from '../domain/codes.ts';
 import { Database, type SqlParam, sqlLiteral } from './database.ts';
 import { COLUMNS, classifyFile, type FileKind, REQUIRED_KINDS } from './layout.ts';
-import { emailWithoutCpf, withoutCpf } from './privacy.ts';
+import { emailWithoutCpf, nameWithoutCpf, withoutCpf } from './privacy.ts';
 import { forEachChunk, latin1ToUtf8 } from './zip.ts';
 
 export const SCHEMA_VERSION = '1';
@@ -222,7 +222,7 @@ const SEARCH_SELECT = `
       e.cnpj_basico || e.cnpj_ordem || e.cnpj_dv AS cnpj,
       e.cnpj_basico,
       e.identificador_matriz_filial = '1' AS matriz,
-      ${withoutCpf("NULLIF(trim(e.nome_fantasia), '')")} AS nome_fantasia,
+      ${nameWithoutCpf("NULLIF(trim(e.nome_fantasia), '')")} AS nome_fantasia,
       e.situacao_cadastral AS situacao,
       try_strptime(e.data_situacao_cadastral, '%Y%m%d')::DATE AS data_situacao,
       try_strptime(e.data_inicio_atividade, '%Y%m%d')::DATE AS data_abertura,
@@ -233,8 +233,8 @@ const SEARCH_SELECT = `
         ELSE string_split(e.cnae_fiscal_secundaria, ',')
       END AS cnaes_secundarios,
       ${withoutCpf(ADDRESS)} AS endereco,
-      ${withoutCpf("NULLIF(trim(e.bairro), '')")} AS bairro,
-      strip_accents(upper(coalesce(${withoutCpf("NULLIF(trim(e.bairro), '')")}, ''))) AS bairro_norm,
+      ${nameWithoutCpf("NULLIF(trim(e.bairro), '')")} AS bairro,
+      strip_accents(upper(coalesce(${nameWithoutCpf("NULLIF(trim(e.bairro), '')")}, ''))) AS bairro_norm,
       NULLIF(trim(e.cep), '') AS cep,
       e.uf,
       e.municipio AS municipio_codigo,
@@ -245,7 +245,7 @@ const SEARCH_SELECT = `
       NULLIF(trim(e.ddd_2), '') AS ddd_2,
       NULLIF(trim(e.telefone_2), '') AS telefone_2,
       ${emailWithoutCpf("NULLIF(lower(trim(e.correio_eletronico)), '')")} AS email,
-      ${withoutCpf("NULLIF(trim(em.razao_social), '')")} AS razao_social,
+      ${nameWithoutCpf("NULLIF(trim(em.razao_social), '')")} AS razao_social,
       em.natureza_juridica,
       TRY_CAST(replace(em.capital_social, ',', '.') AS DOUBLE) AS capital_social,
       em.porte_empresa AS porte,

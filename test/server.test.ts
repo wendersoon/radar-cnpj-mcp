@@ -109,7 +109,7 @@ describe('MCP server', () => {
     try {
       const result = await empty.client.callTool({ name: 'status_base', arguments: {} });
       expect(result.isError).toBe(true);
-      expect(JSON.stringify(result.content)).toContain('radar-cnpj-mcp importar');
+      expect(JSON.stringify(result.content)).toContain('radar-cnpj-mcp baixar');
     } finally {
       await empty.client.close();
     }

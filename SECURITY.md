@@ -6,7 +6,7 @@ vulnerabilidades no código quanto **qualquer forma de expor dados pessoais** qu
 protegidos, por exemplo:
 
 - CPF aparecendo em algum resultado;
-- telefone ou e-mail de MEI exibidos sem que isso tenha sido pedido;
+- telefone ou e-mail de MEI exibidos mesmo quando se pediu para ocultá-los;
 - uma forma de o servidor MCP ler ou gravar arquivos fora da pasta permitida.
 
 ## Como reportar

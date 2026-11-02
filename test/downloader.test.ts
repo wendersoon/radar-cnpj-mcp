@@ -1,172 +1,210 @@
-import { mkdtemp, readdir, readFile as readFileAsync, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readdir, readFile, rm, stat } from 'node:fs/promises';
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { Database } from '../src/data/database.ts';
-import { DownloadError, downloadDataset } from '../src/data/downloader.ts';
-import { importDataset } from '../src/data/importer.ts';
-import { exportRelease } from '../src/data/release.ts';
+import {
+  DownloadError,
+  downloadDataset,
+  parseListing,
+  parseShareUrl,
+} from '../src/data/downloader.ts';
 import { CompanyRepository } from '../src/data/repository.ts';
 import { searchSchema } from '../src/domain/filters.ts';
 import { createDatasetFolder } from './fixtures.ts';
 
-const REPO = 'tester/radar-cnpj-dados';
+const TOKEN = 'token123';
+const ROOT = '/public.php/webdav/Dados/CNPJ';
 
 let workDir: string;
-let releaseDir: string;
+let sourceDir: string;
 let server: Server;
-let api: string;
-/** Files served with altered content, to simulate a corrupted download. */
-const corrupted = new Set<string>();
+let shareUrl: string;
+/** Requested file names, to prove only the needed ones are downloaded. */
+let requested: string[];
+/** How many times each file still fails or arrives truncated. */
+let failures: Map<string, number>;
+let truncated: Set<string>;
+
+function listing(path: string, children: { name: string; size?: number }[]): string {
+  const entry = (href: string, size?: number) =>
+    `<d:response><d:href>${href}</d:href><d:propstat><d:prop>${
+      size === undefined
+        ? '<d:resourcetype><d:collection/></d:resourcetype>'
+        : `<d:resourcetype/><d:getcontentlength>${size}</d:getcontentlength>`
+    }</d:prop></d:propstat></d:response>`;
+  const body = children
+    .map(({ name, size }) => entry(`${path}${name}${size === undefined ? '/' : ''}`, size))
+    .join('');
+  return `<?xml version="1.0"?><d:multistatus xmlns:d="DAV:">${entry(path)}${body}</d:multistatus>`;
+}
 
 beforeAll(async () => {
   workDir = await mkdtemp(join(tmpdir(), 'radar-download-'));
-  const sourceDir = await createDatasetFolder();
-  const fullDb = join(workDir, 'brasil.duckdb');
-  await importDataset({ sourceDir, databasePath: fullDb, referenceMonth: '2026-10' });
-  await rm(sourceDir, { recursive: true, force: true });
-
-  releaseDir = join(workDir, 'release');
-  const db = await Database.open(fullDb, { readOnly: true });
-  await exportRelease(db, releaseDir);
-  db.close();
+  sourceDir = await createDatasetFolder();
 
   server = createServer(async (request, response) => {
+    const expected = `Basic ${Buffer.from(`${TOKEN}:`).toString('base64')}`;
+    if (request.headers.authorization !== expected) {
+      response.statusCode = 401;
+      response.end();
+      return;
+    }
     const url = request.url ?? '';
-    const assets = async () =>
-      (await readdir(releaseDir)).map((name) => ({
-        name,
-        size: 1,
-        browser_download_url: `${api}/files/${name}`,
-      }));
-
-    if (
-      url === `/repos/${REPO}/releases/latest` ||
-      url === `/repos/${REPO}/releases/tags/dados-2026-10`
-    ) {
-      response.setHeader('Content-Type', 'application/json');
-      response.end(JSON.stringify({ tag_name: 'dados-2026-10', assets: await assets() }));
+    if (request.method === 'PROPFIND') {
+      response.statusCode = 207;
+      if (url === `${ROOT}/`) {
+        response.end(
+          listing(url, [{ name: '2026-09' }, { name: '2026-10' }, { name: 'temporario' }]),
+        );
+        return;
+      }
+      if (url === `${ROOT}/2026-10/`) {
+        const names = await readdir(sourceDir);
+        const files = await Promise.all(
+          names.map(async (name) => ({ name, size: (await stat(join(sourceDir, name))).size })),
+        );
+        response.end(listing(url, [...files, { name: 'Socios0.zip', size: 10 }]));
+        return;
+      }
+      response.statusCode = 404;
+      response.end();
       return;
     }
-    const file = /^\/files\/(.+)$/.exec(url)?.[1];
-    if (file) {
-      const content = await readFileAsync(join(releaseDir, file));
-      response.end(corrupted.has(file) ? Buffer.concat([content, Buffer.from('x')]) : content);
+    const name = url.split('/').pop() ?? '';
+    requested.push(name);
+    const remaining = failures.get(name) ?? 0;
+    if (remaining > 0) {
+      failures.set(name, remaining - 1);
+      response.statusCode = 503;
+      response.end();
       return;
     }
-    response.statusCode = 404;
-    response.end('{"message":"Not Found"}');
+    const content = await readFile(join(sourceDir, name));
+    response.end(truncated.has(name) ? content.subarray(0, 10) : content);
   });
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
-  api = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  const { port } = server.address() as AddressInfo;
+  shareUrl = `http://127.0.0.1:${port}/index.php/s/${TOKEN}?dir=/Dados/CNPJ`;
 });
 
 afterAll(async () => {
   await new Promise((resolve) => server?.close(resolve));
   await rm(workDir, { recursive: true, force: true });
+  await rm(sourceDir, { recursive: true, force: true });
 });
 
-const download = (databasePath: string, states: string[], month?: string) =>
-  downloadDataset({
-    databasePath,
-    states,
-    repo: REPO,
-    apiBaseUrl: api,
-    ...(month ? { month } : {}),
+beforeEach(() => {
+  requested = [];
+  failures = new Map();
+  truncated = new Set();
+});
+
+describe('parseShareUrl', () => {
+  it('turns the browser link into the WebDAV endpoint', () => {
+    const share = parseShareUrl('https://example.gov.br/index.php/s/abc?dir=/Dados/CNPJ/');
+    expect(share.webdavUrl).toBe('https://example.gov.br/public.php/webdav/Dados/CNPJ');
+    expect(share.authorization).toBe(`Basic ${Buffer.from('abc:').toString('base64')}`);
   });
 
-describe('exportRelease', () => {
-  it('writes one file per state, lookup tables, metadata and checksums', async () => {
-    expect((await readdir(releaseDir)).sort()).toEqual([
-      'SHA256SUMS',
-      'cnaes.parquet',
-      'estabelecimentos-MG.parquet',
-      'estabelecimentos-SP.parquet',
-      'metadados.json',
-      'municipios.parquet',
+  it.each(['nao-e-link', 'https://example.gov.br/s/abc', 'https://example.gov.br/x?dir=/a'])(
+    'rejects %s',
+    (url) => {
+      expect(() => parseShareUrl(url)).toThrow(DownloadError);
+    },
+  );
+});
+
+describe('parseListing', () => {
+  it('leaves out the listed folder and decodes names', () => {
+    const xml = listing('/a/', [{ name: 'b%20c.zip', size: 5 }, { name: '2026-10' }]);
+    expect(parseListing(xml)).toEqual([
+      { name: 'b c.zip', size: 5, isDirectory: false },
+      { name: '2026-10', size: 0, isDirectory: true },
     ]);
-    const metadata = JSON.parse(await readFileAsync(join(releaseDir, 'metadados.json'), 'utf8'));
-    expect(metadata).toMatchObject({
-      mes_referencia: '2026-10',
-      ufs: [{ uf: 'MG' }, { uf: 'SP' }],
-    });
-  });
-
-  it('refuses to publish a database with only some states', async () => {
-    const sourceDir = await createDatasetFolder();
-    const partial = join(workDir, 'parcial.duckdb');
-    await importDataset({ sourceDir, databasePath: partial, states: ['SP'] });
-    await rm(sourceDir, { recursive: true, force: true });
-    const db = await Database.open(partial, { readOnly: true });
-    try {
-      await expect(exportRelease(db, join(workDir, 'parcial-release'))).rejects.toThrow(
-        'base completa',
-      );
-    } finally {
-      db.close();
-    }
   });
 });
 
 describe('downloadDataset', () => {
-  it('builds a searchable database with only the requested states', async () => {
-    const path = join(workDir, 'sp.duckdb');
-    const summary = await download(path, ['sp']);
-    expect(summary).toMatchObject({ establishments: 5, states: ['SP'], referenceMonth: '2026-10' });
+  it('imports the latest month, downloading only the needed files', async () => {
+    const dir = await mkdtemp(join(workDir, 'ok-'));
+    const databasePath = join(dir, 'base.duckdb');
+    const summary = await downloadDataset({ databasePath, states: ['SP'], shareUrl });
 
-    const db = await Database.open(path, { readOnly: true });
-    try {
-      const repo = new CompanyRepository(db);
-      expect(await repo.status()).toMatchObject({ ufs: ['SP'], mes_referencia: '2026-10' });
+    expect(summary.referenceMonth).toBe('2026-10');
+    expect(summary.states).toEqual(['SP']);
+    expect(requested).not.toContain('Socios0.zip');
+    expect(requested.sort()).toEqual((await readdir(sourceDir)).sort());
+    // Nothing but the database stays behind.
+    expect((await readdir(dir)).filter((name) => name.startsWith('.radar'))).toEqual([]);
 
-      const result = await repo.search(
-        searchSchema.parse({ cnaes: ['4520'], municipios: ['campinas'] }),
-      );
-      expect(result.total).toBe(2);
-
-      // Published data never carries MEI contacts nor the CPF in the name.
-      const [mei] = (
-        await repo.search(searchSchema.parse({ mei: 'somente', incluir_contatos_mei: true }))
-      ).empresas;
-      expect(mei).toMatchObject({ razao_social: 'JOAO DA SILVA', telefones: [], email: null });
-
-      expect(await repo.findMunicipality('belo horizonte')).toEqual([]);
-      expect((await repo.findCnae('funilaria')).map((c) => c.codigo)).toEqual(['4520-0/02']);
-    } finally {
-      db.close();
-    }
-    expect((await readdir(workDir)).filter((name) => name.startsWith('.radar-download-'))).toEqual(
-      [],
-    );
+    const db = await Database.open(databasePath, { readOnly: true });
+    const { total, empresas } = await new CompanyRepository(db).search(searchSchema.parse({}));
+    db.close();
+    expect(total).toBeGreaterThan(0);
+    expect(empresas.every((company) => company.uf === 'SP')).toBe(true);
   });
 
-  it('downloads a specific month', async () => {
-    const summary = await download(join(workDir, 'mes.duckdb'), ['MG'], '2026-10');
-    expect(summary).toMatchObject({ establishments: 1, states: ['MG'] });
+  it('retries a file that fails and one that arrives incomplete', async () => {
+    failures.set('Cnaes.zip', 1);
+    truncated.add('Simples.zip');
+    const dir = await mkdtemp(join(workDir, 'retry-'));
+    await expect(
+      downloadDataset({ databasePath: join(dir, 'b.duckdb'), states: ['SP'], shareUrl }),
+    ).rejects.toThrow(/Simples\.zip.*incompleto.*importar/s);
+    expect(requested.filter((name) => name === 'Cnaes.zip').length).toBeLessThanOrEqual(2);
+    expect(requested.filter((name) => name === 'Simples.zip')).toHaveLength(3);
+
+    truncated.clear();
+    failures.set('Cnaes.zip', 2);
+    const summary = await downloadDataset({
+      databasePath: join(dir, 'b.duckdb'),
+      states: ['SP'],
+      shareUrl,
+    });
+    expect(summary.referenceMonth).toBe('2026-10');
   });
 
-  it('explains unknown months and states', async () => {
-    await expect(download(join(workDir, 'x.duckdb'), ['SP'], '1999-01')).rejects.toThrow(
-      'Não há dados do mês 1999-01',
-    );
-    await expect(download(join(workDir, 'x.duckdb'), ['RR'])).rejects.toThrow(
-      'UF RR não existe no release dados-2026-10. Disponíveis: MG, SP.',
-    );
-    await expect(download(join(workDir, 'x.duckdb'), [])).rejects.toThrow(DownloadError);
+  it('reuses complete files kept from a previous run', async () => {
+    const dir = await mkdtemp(join(workDir, 'keep-'));
+    const options = {
+      databasePath: join(dir, 'b.duckdb'),
+      states: ['SP'],
+      shareUrl,
+      keepDir: join(dir, 'zips'),
+    };
+    const first = await downloadDataset(options);
+    expect(first.downloadedBytes).toBeGreaterThan(0);
+    expect(await readdir(join(dir, 'zips', '2026-10'))).toContain('Cnaes.zip');
+
+    requested = [];
+    const second = await downloadDataset(options);
+    expect(requested).toEqual([]);
+    expect(second.downloadedBytes).toBe(0);
   });
 
-  it('rejects corrupted files and keeps the current database', async () => {
-    const path = join(workDir, 'atual.duckdb');
-    await writeFile(path, 'base atual');
-    corrupted.add('estabelecimentos-SP.parquet');
-    try {
-      await expect(download(path, ['SP'])).rejects.toThrow('veio corrompido');
-    } finally {
-      corrupted.clear();
-    }
-    expect(await readFileAsync(path, 'utf8')).toBe('base atual');
-    expect((await readdir(workDir)).some((name) => name === 'atual.duckdb.importing')).toBe(false);
+  it('reports a month that does not exist, pointing to the manual steps', async () => {
+    const dir = await mkdtemp(join(workDir, 'mes-'));
+    await expect(
+      downloadDataset({
+        databasePath: join(dir, 'b.duckdb'),
+        states: [],
+        month: '2020-01',
+        shareUrl,
+      }),
+    ).rejects.toThrow(/2020-01.*importar/s);
+  });
+
+  it('reports when the share refuses access', async () => {
+    const dir = await mkdtemp(join(workDir, 'auth-'));
+    await expect(
+      downloadDataset({
+        databasePath: join(dir, 'b.duckdb'),
+        states: [],
+        shareUrl: shareUrl.replace(TOKEN, 'outro'),
+      }),
+    ).rejects.toThrow(/HTTP 401.*RADAR_CNPJ_RECEITA_URL/s);
   });
 });

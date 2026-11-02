@@ -80,11 +80,11 @@ export const searchShape = {
   ordenar_por: z.enum(SORT_ORDERS).default('mais_recentes'),
   limite: z.number().int().min(1).max(500).default(50).describe('Máximo de empresas retornadas.'),
   deslocamento: z.number().int().min(0).default(0).describe('Quantas empresas pular (paginação).'),
-  incluir_contatos_mei: z
+  ocultar_contatos_mei: z
     .boolean()
     .default(false)
     .describe(
-      'Exibir telefone e e-mail de MEIs. Desligado por padrão: o contato de um MEI costuma ser o da própria pessoa física (LGPD).',
+      'Ocultar telefone e e-mail de MEIs, que costumam ser os da própria pessoa física. Use ao compartilhar os resultados.',
     ),
 };
 

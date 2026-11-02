@@ -88,7 +88,7 @@ interface CompanyRow {
   email: string | null;
 }
 
-export type ExportParams = Filters & Pick<SearchParams, 'ordenar_por' | 'incluir_contatos_mei'>;
+export type ExportParams = Filters & Pick<SearchParams, 'ordenar_por' | 'ocultar_contatos_mei'>;
 
 const EXPORT_PAGE_SIZE = 5_000;
 
@@ -138,7 +138,7 @@ export class CompanyRepository {
       total,
       limite: params.limite,
       deslocamento: params.deslocamento,
-      empresas: rows.map((row) => toCompany(row, params.incluir_contatos_mei)),
+      empresas: rows.map((row) => toCompany(row, params.ocultar_contatos_mei)),
     };
   }
 
@@ -200,7 +200,7 @@ export class CompanyRepository {
     );
   }
 
-  async getCompany(cnpj: string, includeMeiContacts = false): Promise<CompanyDetail | null> {
+  async getCompany(cnpj: string, hideMeiContacts = false): Promise<CompanyDetail | null> {
     const [row] = await this.db.all<CompanyRow>('SELECT * FROM estabelecimentos WHERE cnpj = $1', [
       normalizeCnpj(cnpj),
     ]);
@@ -219,7 +219,7 @@ export class CompanyRepository {
         : [];
 
     return {
-      ...toCompany(row, includeMeiContacts),
+      ...toCompany(row, hideMeiContacts),
       data_situacao: row.data_situacao,
       natureza_juridica: row.natureza_juridica,
       cnaes_secundarios: secondary.map((cnae) => ({
@@ -252,7 +252,7 @@ export class CompanyRepository {
       const size = Math.min(EXPORT_PAGE_SIZE, maxRows - written);
       const rows = await this.page(where.sql, where.params, params.ordenar_por, size, written);
       for (const row of rows) {
-        if (!out.write(`${toCsvLine(toCompany(row, params.incluir_contatos_mei))}\r\n`)) {
+        if (!out.write(`${toCsvLine(toCompany(row, params.ocultar_contatos_mei))}\r\n`)) {
           await once(out, 'drain');
         }
       }
@@ -322,8 +322,8 @@ export class CompanyRepository {
   }
 }
 
-function toCompany(row: CompanyRow, includeMeiContacts: boolean): Company {
-  const hideContacts = row.mei && !includeMeiContacts;
+function toCompany(row: CompanyRow, hideMeiContacts: boolean): Company {
+  const hideContacts = row.mei && hideMeiContacts;
   const phones = [formatPhone(row.ddd_1, row.telefone_1), formatPhone(row.ddd_2, row.telefone_2)];
 
   return {

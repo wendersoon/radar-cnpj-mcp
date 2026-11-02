@@ -49,9 +49,9 @@ RADAR_CNPJ_DB=/tmp/teste.duckdb node dist/cli.js contar --agrupar municipio
 - Mantenha o PR focado e com testes. Mudanças nas ferramentas MCP devem ser cobertas em
   `test/server.test.ts`.
 - Use consultas parametrizadas: nenhum valor vindo do usuário entra no texto do SQL.
-- **Privacidade:** não exponha dados de pessoas físicas. Contatos de MEI ficam ocultos por
-  padrão, e o CPF que a Receita acrescenta ao nome de empresários individuais é removido.
-  Recursos novos devem seguir essa linha.
+- **Privacidade:** não exponha dados de pessoas físicas. O projeto não hospeda nem redistribui
+  a base, os dados de sócios não são importados e o CPF que a Receita acrescenta ao nome de
+  empresários individuais é removido. Recursos novos devem seguir essa linha.
 - O título do PR segue [Conventional Commits](https://www.conventionalcommits.org/pt-br/), em
   inglês e curto: `feat(cli): add --format json to contar`, `fix(data): ...`.
 - O CI (lint, tipos e testes em Linux, macOS e Windows) precisa passar. Os PRs entram por

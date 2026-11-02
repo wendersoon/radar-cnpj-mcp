@@ -168,11 +168,11 @@ describe('search', () => {
     expect((await search({ bairros: ['529'], situacao: 'todas' })).total).toBe(0);
   });
 
-  it('hides MEI contacts unless asked', async () => {
-    const [hidden] = (await search({ mei: 'somente' })).empresas;
+  it('shows MEI contacts unless asked to hide them', async () => {
+    const [hidden] = (await search({ mei: 'somente', ocultar_contatos_mei: true })).empresas;
     expect(hidden).toMatchObject({ telefones: [], email: null, contatos_ocultos: true });
 
-    const [shown] = (await search({ mei: 'somente', incluir_contatos_mei: true })).empresas;
+    const [shown] = (await search({ mei: 'somente' })).empresas;
     expect(shown).toMatchObject({ telefones: ['(19) 99988-7766'], email: 'joao@example.com' });
     expect(shown).not.toHaveProperty('contatos_ocultos');
   });
