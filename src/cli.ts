@@ -5,6 +5,7 @@ import { parseArgs } from 'node:util';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { ZodError } from 'zod';
 import { defaultDatabasePath, defaultExportDir } from './config.ts';
+import { DownloadStatusWriter } from './data/download-job.ts';
 import { downloadDataset } from './data/downloader.ts';
 import { importDataset } from './data/importer.ts';
 import { LazyRepositoryProvider } from './data/provider.ts';
@@ -89,7 +90,12 @@ async function main(argv: string[]): Promise<void> {
 
 async function serveMcp(databasePath: string): Promise<void> {
   const provider = new LazyRepositoryProvider(databasePath);
-  const server = createServer(provider, { version: VERSION, exportDir: defaultExportDir() });
+  const server = createServer(provider, {
+    version: VERSION,
+    exportDir: defaultExportDir(),
+    databasePath,
+    cliPath: process.argv[1] ?? '',
+  });
   const shutdown = async () => {
     await server.close();
     provider.close();
@@ -111,6 +117,7 @@ async function runDownload(args: string[], databasePath: string): Promise<void> 
       mes: { type: 'string' },
       'manter-arquivos': { type: 'string' },
       memoria: { type: 'string' },
+      'status-arquivo': { type: 'string' },
     },
   });
   if (!values.ufs && !values.todas) {
@@ -120,22 +127,38 @@ async function runDownload(args: string[], databasePath: string): Promise<void> 
     throw new UsageError('Use --mes no formato AAAA-MM');
   }
 
+  const states = values.todas ? [] : (values.ufs?.split(',').filter(Boolean) ?? []);
+  // Set when baixar_dados started this process: progress goes to a file the MCP server reads.
+  const statusFile = values['status-arquivo']
+    ? new DownloadStatusWriter(values['status-arquivo'], states, values.mes)
+    : undefined;
+
   const started = Date.now();
   const summary = await downloadDataset({
     databasePath,
-    states: values.todas ? [] : (values.ufs?.split(',').filter(Boolean) ?? []),
+    states,
     ...(values.mes ? { month: values.mes } : {}),
     ...(process.env.RADAR_CNPJ_RECEITA_URL ? { shareUrl: process.env.RADAR_CNPJ_RECEITA_URL } : {}),
     ...(values['manter-arquivos'] ? { keepDir: resolve(values['manter-arquivos']) } : {}),
     ...(values.memoria ? { memoryLimit: values.memoria } : {}),
-    log: (message) => console.error(message),
+    log: (message) => {
+      console.error(message);
+      statusFile?.step(message);
+    },
+  }).catch(async (error: unknown) => {
+    await statusFile?.fail(error);
+    throw error;
+  });
+  await statusFile?.finish({
+    estabelecimentos: summary.establishments,
+    mes_referencia: summary.referenceMonth,
   });
 
   const minutes = ((Date.now() - started) / 60_000).toFixed(1).replace('.', ',');
-  const states = summary.states.length > 0 ? summary.states.join(', ') : 'todas';
+  const imported = summary.states.length > 0 ? summary.states.join(', ') : 'todas';
   console.log(
     `${summary.establishments.toLocaleString('pt-BR')} estabelecimentos prontos ` +
-      `(UFs: ${states}; mês: ${summary.referenceMonth}) em ${minutes} min.\nBase: ${summary.databasePath}`,
+      `(UFs: ${imported}; mês: ${summary.referenceMonth}) em ${minutes} min.\nBase: ${summary.databasePath}`,
   );
 }
 

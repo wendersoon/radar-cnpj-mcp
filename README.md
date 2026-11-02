@@ -10,15 +10,15 @@ direto do seu agente de IA ou do terminal.**
 [![Node](https://img.shields.io/badge/node-%3E%3D20-339933?logo=node.js&logoColor=white)](https://nodejs.org)
 [![Licença: MIT](https://img.shields.io/badge/licen%C3%A7a-MIT-blue)](LICENSE)
 
-![Um agente de IA usando o radar-cnpj-mcp para prospectar oficinas mecânicas em Campinas](assets/agente.gif)
+![Um agente de IA usando o radar-cnpj-mcp para consultar oficinas mecânicas em Campinas](assets/agente.gif)
 
 </div>
 
 ## Por que
 
-Você vende algo para empresas e quer saber **quem são os clientes possíveis na sua região**:
-quantas oficinas existem em Campinas, quais academias abriram este ano em São Paulo, onde
-se concentram as clínicas odontológicas do estado.
+Você quer entender **quais empresas existem em um setor ou região**: quantas oficinas há em
+Campinas, quais academias abriram este ano em São Paulo, onde se concentram as clínicas
+odontológicas do estado.
 
 A Receita Federal publica o cadastro de **mais de 70 milhões de estabelecimentos**, mas em
 arquivos brutos de vários GB. O radar-cnpj-mcp transforma isso numa base local, consultada
@@ -106,6 +106,10 @@ claude mcp add radar-cnpj -- npx -y radar-cnpj-mcp
 
 Pronto: peça ao agente o que procura. Para atualizar a base todo mês, rode o `baixar` de novo.
 
+Também dá para pedir ao agente: _"Baixe os dados da Receita para SP e MG."_ Ele confirma com você
+e o download continua em segundo plano, mesmo se você fechar o agente. Cada download substitui a
+base atual, então inclua todas as UFs que quiser manter.
+
 ### Instalação via npm
 
 Se preferir instalar em vez de usar o `npx`:
@@ -133,15 +137,17 @@ Para atualizar a ferramenta: `npm update -g radar-cnpj-mcp`.
 
 ## O que o agente ganha
 
-| Ferramenta         | O que faz                                                                    |
-| ------------------ | ---------------------------------------------------------------------------- |
-| `buscar_empresas`  | Lista empresas com CNPJ, razão social, atividade, endereço e contatos        |
-| `contar_empresas`  | Conta empresas, agrupando por UF, município, bairro, CNAE, porte, MEI ou ano |
-| `buscar_cnae`      | Descobre o código CNAE a partir da descrição da atividade                    |
-| `buscar_municipio` | Encontra municípios pelo nome                                                |
-| `detalhar_empresa` | Mostra todos os dados de um CNPJ                                             |
-| `exportar_csv`     | Gera uma planilha CSV pronta para o Excel                                    |
-| `status_base`      | Informa o mês de referência e as UFs importadas                              |
+| Ferramenta           | O que faz                                                                    |
+| -------------------- | ---------------------------------------------------------------------------- |
+| `buscar_empresas`    | Lista empresas com CNPJ, razão social, atividade, endereço e contatos        |
+| `contar_empresas`    | Conta empresas, agrupando por UF, município, bairro, CNAE, porte, MEI ou ano |
+| `buscar_cnae`        | Descobre o código CNAE a partir da descrição da atividade                    |
+| `buscar_municipio`   | Encontra municípios pelo nome                                                |
+| `detalhar_empresa`   | Mostra todos os dados de um CNPJ                                             |
+| `exportar_csv`       | Gera uma planilha CSV pronta para o Excel                                    |
+| `status_base`        | Informa o mês de referência e as UFs importadas                              |
+| `baixar_dados`       | Baixa os dados da Receita em segundo plano, a pedido do usuário              |
+| `andamento_download` | Mostra a etapa do download iniciado pelo agente                              |
 
 **Filtros:** CNAE (exato ou por prefixo, principal ou secundário), UF, município, bairro,
 CEP, situação cadastral, data de abertura, porte, MEI, matriz/filial, capital social e
