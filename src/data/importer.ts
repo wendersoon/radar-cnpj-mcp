@@ -215,7 +215,7 @@ const SEARCH_SELECT = `
       e.cnpj_basico || e.cnpj_ordem || e.cnpj_dv AS cnpj,
       e.cnpj_basico,
       e.identificador_matriz_filial = '1' AS matriz,
-      NULLIF(trim(e.nome_fantasia), '') AS nome_fantasia,
+      NULLIF(regexp_replace(trim(e.nome_fantasia), '\\s*\\d{11}$', ''), '') AS nome_fantasia,
       e.situacao_cadastral AS situacao,
       try_strptime(e.data_situacao_cadastral, '%Y%m%d')::DATE AS data_situacao,
       try_strptime(e.data_inicio_atividade, '%Y%m%d')::DATE AS data_abertura,
@@ -242,7 +242,8 @@ const SEARCH_SELECT = `
       NULLIF(trim(e.ddd_2), '') AS ddd_2,
       NULLIF(trim(e.telefone_2), '') AS telefone_2,
       NULLIF(lower(trim(e.correio_eletronico)), '') AS email,
-      NULLIF(trim(em.razao_social), '') AS razao_social,
+      -- Receita appends the owner's CPF to the name of sole proprietors; drop it (LGPD).
+      NULLIF(regexp_replace(trim(em.razao_social), '\\s*\\d{11}$', ''), '') AS razao_social,
       em.natureza_juridica,
       TRY_CAST(replace(em.capital_social, ',', '.') AS DOUBLE) AS capital_social,
       em.porte_empresa AS porte,

@@ -152,6 +152,11 @@ describe('search', () => {
     });
   });
 
+  it('removes the CPF that Receita appends to sole proprietor names', async () => {
+    const [mei] = (await search({ mei: 'somente' })).empresas;
+    expect(mei?.razao_social).toBe('JOAO DA SILVA');
+  });
+
   it('hides MEI contacts unless asked', async () => {
     const [hidden] = (await search({ mei: 'somente' })).empresas;
     expect(hidden).toMatchObject({ telefones: [], email: null, contatos_ocultos: true });
