@@ -35,7 +35,7 @@ export function registerTools(
     {
       title: 'Contar empresas',
       description:
-        'Conta as empresas que atendem aos filtros, opcionalmente agrupando por UF, município, bairro, CNAE, porte, MEI ou ano de abertura. As contagens são exatas sobre toda a base importada, sem amostragem nem teto (números redondos são coincidência); maximo_grupos só limita quantos grupos são listados. Ideal para dimensionar um mercado.',
+        'Conta as empresas que atendem aos filtros, opcionalmente agrupando por UF, município, bairro, CNAE, porte, MEI ou ano de abertura. As contagens são exatas sobre toda a base importada, sem amostragem nem teto (números redondos são coincidência); maximo_grupos só limita quantos grupos são listados. Ideal para ver totais e distribuições.',
       inputSchema: countShape,
       annotations: READ_ONLY,
     },
@@ -109,7 +109,7 @@ export function registerTools(
           .string()
           .regex(/^[\w.-]+\.csv$/, 'Use apenas um nome de arquivo terminado em .csv, sem pastas.')
           .optional()
-          .describe('Nome do arquivo. Padrão: leads-<data-hora>.csv'),
+          .describe('Nome do arquivo. Padrão: empresas-<data-hora>.csv'),
         maximo_linhas: z.number().int().min(1).max(MAX_EXPORT_ROWS).default(10_000),
       },
       annotations: {
@@ -122,7 +122,7 @@ export function registerTools(
     ({ arquivo, maximo_linhas, ...params }) =>
       run(async () => {
         await mkdir(options.exportDir, { recursive: true });
-        const name = arquivo ?? `leads-${new Date().toISOString().replace(/[:.]/g, '-')}.csv`;
+        const name = arquivo ?? `empresas-${new Date().toISOString().replace(/[:.]/g, '-')}.csv`;
         const path = join(options.exportDir, name);
         const linhas = await (await provider.get()).exportCsv(params, path, maximo_linhas);
         return { arquivo: path, linhas };

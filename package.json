@@ -1,6 +1,6 @@
 {
   "name": "radar-cnpj-mcp",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "MCP server and CLI to find Brazilian companies by CNAE and region using the Receita Federal open CNPJ data",
   "keywords": [
     "mcp",
@@ -8,8 +8,6 @@
     "cnpj",
     "cnae",
     "receita-federal",
-    "leads",
-    "prospeccao",
     "brasil"
   ],
   "license": "MIT",

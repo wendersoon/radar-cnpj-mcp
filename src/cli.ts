@@ -37,7 +37,7 @@ Uso:
   radar-cnpj-mcp buscar [filtros]        lista empresas no terminal
       --cnae 4520-0/01   --uf SP   --municipio Campinas   --bairro Centro
       --aberta-apos 2025-01-01   --sem-mei   --limite 20   --json
-      --csv leads.csv                    grava o resultado num CSV
+      --csv dados.csv                    grava o resultado num CSV
   radar-cnpj-mcp contar [filtros]        conta empresas, com os mesmos filtros de buscar
       --agrupar municipio                uf, municipio, bairro, cnae, porte, mei, ano_abertura
       --grupos 10                        quantos grupos mostrar
