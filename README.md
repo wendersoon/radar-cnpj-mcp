@@ -210,9 +210,7 @@ O radar-cnpj-mcp é apenas uma interface local:
 
 - não hospeda, não coleta e não recebe dados nem consultas: cada pessoa baixa a base pública de
   CNPJ da Receita Federal para a própria máquina;
-- não importa os dados de sócios;
-- remove na importação os números em formato de CPF, o que reduz mas não garante a ausência de
-  todos, já que os campos da Receita são texto livre.
+- não importa os dados de sócios.
 
 Por isso, o projeto não tem dados para alterar ou remover. Na origem, a solicitação precisa ser
 feita à própria Receita Federal.
