@@ -13,7 +13,7 @@ vulnerabilidades no código e no pacote publicado, por exemplo:
 - **Conteúdo dos dados e pedidos de alteração ou remoção:** os dados são publicados pela Receita
   Federal e ficam na máquina de quem os baixa, então não há nada hospedado pelo projeto para
   remover. Na origem, a solicitação precisa ser feita à própria Receita Federal.
-- **Falhas na remoção de CPFs ou na opção de ocultar contatos de MEI:** são bugs comuns. Abra uma
+- **Falhas na opção de ocultar contatos de MEI:** são bugs comuns. Abra uma
   [issue](https://github.com/wendersoon/radar-cnpj-mcp/issues/new/choose) sem incluir o dado.
 
 ## Como reportar
