@@ -135,6 +135,10 @@ npm run typecheck
 npm run build
 ```
 
+## Contribuindo
+
+Contribuições são bem-vindas! Veja o [CONTRIBUTING.md](CONTRIBUTING.md).
+
 ## Licença
 
 [MIT](LICENSE). Dados: [Receita Federal do Brasil – Dados Abertos do
