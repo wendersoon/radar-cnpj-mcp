@@ -46,17 +46,14 @@ Outras ideias:
 
 Requer [Node.js](https://nodejs.org) 20 ou superior.
 
-**1. Baixe os dados da Receita.** Em
-[arquivos.receitafederal.gov.br](https://arquivos.receitafederal.gov.br/), abra
-**Dados › Cadastros › CNPJ** e baixe a pasta do mês mais recente (cerca de 7 GB).
-
-**2. Importe as UFs que interessam.**
+**1. Baixe a base das UFs que interessam.** Só as UFs pedidas, em segundos, a partir da base
+pronta do [radar-cnpj-dados](https://github.com/wendersoon/radar-cnpj-dados):
 
 ```sh
-npx -y radar-cnpj-mcp importar ~/Downloads/2026-10 --ufs SP,MG
+npx -y radar-cnpj-mcp baixar --ufs SP,MG
 ```
 
-**3. Conecte ao seu agente de IA.**
+**2. Conecte ao seu agente de IA.**
 
 <details open>
 <summary><b>Claude Code</b></summary>
@@ -80,6 +77,48 @@ claude mcp add radar-cnpj -- npx -y radar-cnpj-mcp
   }
 }
 ```
+
+</details>
+
+Pronto: peça ao agente o que procura. Para atualizar a base todo mês, rode o `baixar` de novo.
+
+### Instalação via npm
+
+Se preferir instalar em vez de usar o `npx`:
+
+```sh
+npm install -g radar-cnpj-mcp
+radar-cnpj-mcp baixar --ufs SP,MG
+```
+
+E configure o agente com o comando instalado:
+
+```sh
+claude mcp add radar-cnpj -- radar-cnpj-mcp
+```
+
+```json
+{
+  "mcpServers": {
+    "radar-cnpj": { "command": "radar-cnpj-mcp" }
+  }
+}
+```
+
+Para atualizar a ferramenta: `npm update -g radar-cnpj-mcp`.
+
+<details>
+<summary><b>Importar direto da Receita Federal</b></summary>
+
+Para usar um mês que ainda não está no radar-cnpj-dados, baixe a pasta do mês em
+[arquivos.receitafederal.gov.br](https://arquivos.receitafederal.gov.br/) (**Dados › Cadastros ›
+CNPJ**, cerca de 7 GB) e importe:
+
+```sh
+npx -y radar-cnpj-mcp importar ~/Downloads/2026-10 --ufs SP,MG
+```
+
+A importação lê todos os arquivos da Receita, então leva alguns minutos mesmo para uma só UF.
 
 </details>
 
@@ -114,6 +153,7 @@ npx radar-cnpj-mcp contar --cnae 4520-0/01 --uf SP --agrupar municipio
 npx radar-cnpj-mcp buscar --cnae 4520-0/01 --municipio Campinas --sem-mei --limite 20
 npx radar-cnpj-mcp buscar --cnae 4520 --municipio Campinas --csv oficinas.csv
 npx radar-cnpj-mcp status
+npx radar-cnpj-mcp --help
 ```
 
 ## Privacidade
