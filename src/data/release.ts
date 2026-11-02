@@ -3,6 +3,7 @@ import { createReadStream } from 'node:fs';
 import { mkdir, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { type Database, sqlLiteral } from './database.ts';
+import { emailWithoutCpf, withoutCpf } from './privacy.ts';
 
 /**
  * Format of the monthly dataset published as GitHub Release assets: one
@@ -39,22 +40,23 @@ export interface ReleaseMetadata {
 }
 
 /**
- * Published columns. MEI contacts are always left out, and the CPF that
- * Receita appends to sole proprietor names is removed again here as a second
- * line of defense, in case the database came from an older import.
+ * Published columns. MEI contacts are always left out. CPFs are removed again
+ * here as a second line of defense, in case the database came from an older import.
  */
-const COLUMNS = String.raw`
+const COLUMNS = `
   cnpj, cnpj_basico, matriz,
-  NULLIF(regexp_replace(nome_fantasia, '\s*\d{11}$', ''), '') AS nome_fantasia,
+  ${withoutCpf('nome_fantasia')} AS nome_fantasia,
   situacao, data_situacao, data_abertura,
   cnae_principal, cnae_descricao, cnaes_secundarios,
-  endereco, bairro, cep, uf, municipio_codigo, municipio,
+  ${withoutCpf('endereco')} AS endereco,
+  ${withoutCpf('bairro')} AS bairro,
+  cep, uf, municipio_codigo, municipio,
   CASE WHEN mei THEN NULL ELSE ddd_1 END AS ddd_1,
   CASE WHEN mei THEN NULL ELSE telefone_1 END AS telefone_1,
   CASE WHEN mei THEN NULL ELSE ddd_2 END AS ddd_2,
   CASE WHEN mei THEN NULL ELSE telefone_2 END AS telefone_2,
-  CASE WHEN mei THEN NULL ELSE email END AS email,
-  NULLIF(regexp_replace(razao_social, '\s*\d{11}$', ''), '') AS razao_social,
+  CASE WHEN mei THEN NULL ELSE ${emailWithoutCpf('email')} END AS email,
+  ${withoutCpf('razao_social')} AS razao_social,
   natureza_juridica, capital_social, porte, simples, mei`;
 
 /**
@@ -114,7 +116,8 @@ export async function exportRelease(
     fonte: 'Receita Federal do Brasil - Dados Abertos do CNPJ',
     versao_esquema: metadata.get('versao_esquema') ?? null,
     tratamento_lgpd: [
-      'CPF removido do nome de empresários individuais',
+      'números em formato de CPF removidos de nomes, endereços e bairros',
+      'e-mails contendo número em formato de CPF omitidos',
       'telefone e e-mail de MEIs omitidos',
     ],
     ufs: perState,
