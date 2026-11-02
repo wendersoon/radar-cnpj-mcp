@@ -3,7 +3,7 @@
 # 📡 radar-cnpj-mcp
 
 **Encontre empresas por atividade e região na base pública de CNPJ da Receita Federal,
-direto do seu assistente de IA ou do terminal.**
+direto do seu agente de IA ou do terminal.**
 
 [![CI](https://github.com/wendersoon/radar-cnpj-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/wendersoon/radar-cnpj-mcp/actions/workflows/ci.yml)
 [![MCP](https://img.shields.io/badge/MCP-server-8A2BE2)](https://modelcontextprotocol.io)
@@ -22,11 +22,11 @@ se concentram as clínicas odontológicas do estado.
 
 A Receita Federal publica o cadastro de **mais de 70 milhões de estabelecimentos**, mas em
 arquivos brutos de vários GB. O radar-cnpj-mcp transforma isso numa base local, consultada
-em milissegundos, que o seu assistente de IA entende.
+em milissegundos, que o seu agente de IA entende.
 
 - ⚡ **Instantâneo**: buscas em milissegundos, mesmo no Brasil inteiro
 - 🔒 **Local e gratuito**: os dados ficam na sua máquina, sem mensalidade nem limite de resultados
-- 🧠 **Feito para IA**: o assistente traduz "oficina mecânica" para o CNAE certo e aplica os filtros
+- 🧠 **Feito para IA**: o agente traduz "oficina mecânica" para o CNAE certo e aplica os filtros
 - 🇧🇷 **Pensado para o Brasil**: busca sem acentos, MEI separado de microempresa, CSV pronto para o Excel
 
 ## Pergunte do seu jeito
@@ -56,7 +56,7 @@ Requer [Node.js](https://nodejs.org) 20 ou superior.
 npx -y radar-cnpj-mcp importar ~/Downloads/2026-10 --ufs SP,MG
 ```
 
-**3. Conecte ao seu assistente.**
+**3. Conecte ao seu agente de IA.**
 
 <details open>
 <summary><b>Claude Code</b></summary>
@@ -83,7 +83,7 @@ claude mcp add radar-cnpj -- npx -y radar-cnpj-mcp
 
 </details>
 
-## O que o assistente ganha
+## O que o agente ganha
 
 | Ferramenta         | O que faz                                                                    |
 | ------------------ | ---------------------------------------------------------------------------- |
