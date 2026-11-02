@@ -142,6 +142,31 @@ export function registerTools(
   );
 
   server.registerTool(
+    'perfil_municipio',
+    {
+      title: 'Perfil do município',
+      description:
+        'Resume a economia de um município em uma chamada: empresas ativas, principais setores, porte, percentual de MEIs, situação cadastral e aberturas dos últimos 12 meses completos comparadas aos 12 anteriores. Retorna só totais, sem listar empresas.',
+      inputSchema: {
+        municipio: z.string().min(2).describe('Nome do município, sem diferenciar acentos.'),
+        uf: z.enum(UFS).optional().describe('UF do município. Necessária em caso de homônimos.'),
+        principais_setores: z
+          .number()
+          .int()
+          .min(1)
+          .max(50)
+          .default(10)
+          .describe('Quantos setores (CNAE principal) listar.'),
+      },
+      annotations: READ_ONLY,
+    },
+    ({ municipio, uf, principais_setores }) =>
+      run(async () =>
+        (await provider.get()).analytics.municipalityProfile(municipio, uf, principais_setores),
+      ),
+  );
+
+  server.registerTool(
     'baixar_dados',
     {
       title: 'Baixar dados da Receita',

@@ -69,6 +69,7 @@ describe('MCP server', () => {
       'contar_empresas',
       'detalhar_empresa',
       'exportar_csv',
+      'perfil_municipio',
       'status_base',
     ]);
     expect(byName.buscar_empresas?.annotations?.readOnlyHint).toBe(true);

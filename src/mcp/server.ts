@@ -23,6 +23,8 @@ Fluxo recomendado:
 3. Use contar_empresas (com agrupar_por) para ver os totais antes de listar.
 4. Use buscar_empresas para listar e exportar_csv para entregar listas grandes.
 
+Para visão geral de uma cidade, use perfil_municipio.
+
 Por padrão só empresas ATIVAS são consideradas. Telefone e e-mail de MEIs costumam ser os da própria pessoa física: use-os com cuidado (LGPD).
 Os dados refletem o mês de referência informado por status_base.`;
 
