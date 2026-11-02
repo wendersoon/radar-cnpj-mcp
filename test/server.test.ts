@@ -120,15 +120,15 @@ describe('MCP prompts', () => {
   it('lists the ready-made workflows', async () => {
     const { prompts } = await client.listPrompts();
     expect(prompts.map((prompt) => prompt.name).sort()).toEqual([
-      'dimensionar_mercado',
-      'empresas_novas',
-      'prospectar',
+      'consultar_empresas',
+      'empresas_recentes',
+      'panorama_setor',
     ]);
   });
 
-  it('builds a prospecting request from the arguments', async () => {
+  it('builds a company query from the arguments', async () => {
     const { messages } = await client.getPrompt({
-      name: 'prospectar',
+      name: 'consultar_empresas',
       arguments: { atividade: 'oficina mecânica', regiao: 'Campinas', criterios: 'sem MEI' },
     });
     const [message] = messages;
@@ -142,7 +142,7 @@ describe('MCP prompts', () => {
 
   it('computes the start date of recent openings', async () => {
     const { messages } = await client.getPrompt({
-      name: 'empresas_novas',
+      name: 'empresas_recentes',
       arguments: { atividade: 'academia', regiao: 'SP', dias: '30' },
     });
     const text = messages[0]?.content.type === 'text' ? messages[0].content.text : '';
@@ -152,7 +152,7 @@ describe('MCP prompts', () => {
 
   it('completes states with the imported ones', async () => {
     const { completion } = await client.complete({
-      ref: { type: 'ref/prompt', name: 'dimensionar_mercado' },
+      ref: { type: 'ref/prompt', name: 'panorama_setor' },
       argument: { name: 'uf', value: 's' },
     });
     expect(completion.values).toEqual(['SP']);

@@ -16,9 +16,9 @@ export function registerPrompts(server: McpServer, provider: RepositoryProvider)
   };
 
   server.registerPrompt(
-    'prospectar',
+    'consultar_empresas',
     {
-      title: 'Prospectar empresas',
+      title: 'Consultar empresas',
       description: 'Encontra e lista empresas de uma atividade numa região.',
       argsSchema: {
         atividade: z.string().describe('O que as empresas fazem, ex.: "oficina mecânica".'),
@@ -30,22 +30,22 @@ export function registerPrompts(server: McpServer, provider: RepositoryProvider)
       },
     },
     ({ atividade, regiao, criterios }) =>
-      userMessage(`Quero prospectar empresas de "${atividade}" em ${regiao}.${
+      userMessage(`Quero consultar empresas de "${atividade}" em ${regiao}.${
         criterios ? `\nCritérios adicionais: ${criterios}.` : ''
       }
 
 Use as ferramentas do radar-cnpj:
 1. Descubra os códigos CNAE da atividade com buscar_cnae. Se houver mais de um código plausível, use todos e diga quais escolheu.
 2. Confirme os municípios da região com buscar_municipio quando houver dúvida.
-3. Use contar_empresas agrupando por município para mostrar o tamanho do mercado.
-4. Liste as empresas com buscar_empresas aplicando os critérios, numa tabela com nome, município, bairro, data de abertura e telefone.
+3. Use contar_empresas agrupando por município para mostrar os totais.
+4. Liste as empresas com buscar_empresas aplicando os critérios, numa tabela com nome, município, bairro e data de abertura.
 5. Se houver mais resultados do que a lista mostra, ofereça exportar tudo com exportar_csv.`),
   );
 
   server.registerPrompt(
-    'dimensionar_mercado',
+    'panorama_setor',
     {
-      title: 'Dimensionar mercado',
+      title: 'Panorama de um setor',
       description: 'Mostra quantas empresas de uma atividade existem e onde se concentram.',
       argsSchema: {
         atividade: z.string().describe('O que as empresas fazem.'),
@@ -53,18 +53,18 @@ Use as ferramentas do radar-cnpj:
       },
     },
     ({ atividade, uf }) =>
-      userMessage(`Quero entender o mercado de "${atividade}" em ${uf.toUpperCase()}.
+      userMessage(`Quero um panorama das empresas de "${atividade}" em ${uf.toUpperCase()}.
 
 Use as ferramentas do radar-cnpj:
 1. Descubra os códigos CNAE da atividade com buscar_cnae.
 2. Com contar_empresas, mostre o total de empresas ativas e as contagens agrupadas por município, por porte e por ano de abertura.
-3. Resuma em poucos tópicos onde o mercado se concentra, a proporção de MEIs e se o número de aberturas está crescendo nos últimos anos.`),
+3. Resuma em poucos tópicos onde as empresas se concentram, a proporção de MEIs e se o número de aberturas está crescendo nos últimos anos.`),
   );
 
   server.registerPrompt(
-    'empresas_novas',
+    'empresas_recentes',
     {
-      title: 'Empresas recém-abertas',
+      title: 'Empresas abertas recentemente',
       description: 'Lista empresas de uma atividade abertas recentemente numa região.',
       argsSchema: {
         atividade: z.string().describe('O que as empresas fazem.'),
@@ -80,7 +80,7 @@ Use as ferramentas do radar-cnpj:
 Use as ferramentas do radar-cnpj:
 1. Descubra os códigos CNAE da atividade com buscar_cnae.
 2. Use buscar_empresas com aberta_apos = "${since}" e ordenar_por = "mais_recentes".
-3. Mostre uma tabela com nome, município, bairro, data de abertura e telefone, e informe o total.
+3. Mostre uma tabela com nome, município, bairro e data de abertura, e informe o total.
 4. Lembre que a base reflete o mês de referência de status_base: aberturas mais recentes ainda não aparecem.`);
     },
   );
