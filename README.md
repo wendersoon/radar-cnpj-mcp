@@ -103,6 +103,10 @@ claude mcp add radar-cnpj -- npx -y radar-cnpj-mcp
 
 Pronto: peça ao agente o que procura. Para atualizar a base todo mês, rode o `baixar` de novo.
 
+Também dá para pedir ao agente: _"Baixe os dados da Receita para SP e MG."_ Ele confirma com você
+e o download continua em segundo plano, mesmo se você fechar o agente. Cada download substitui a
+base atual, então inclua todas as UFs que quiser manter.
+
 ### Instalação via npm
 
 Se preferir instalar em vez de usar o `npx`:
@@ -130,15 +134,17 @@ Para atualizar a ferramenta: `npm update -g radar-cnpj-mcp`.
 
 ## O que o agente ganha
 
-| Ferramenta         | O que faz                                                                    |
-| ------------------ | ---------------------------------------------------------------------------- |
-| `buscar_empresas`  | Lista empresas com CNPJ, razão social, atividade, endereço e contatos        |
-| `contar_empresas`  | Conta empresas, agrupando por UF, município, bairro, CNAE, porte, MEI ou ano |
-| `buscar_cnae`      | Descobre o código CNAE a partir da descrição da atividade                    |
-| `buscar_municipio` | Encontra municípios pelo nome                                                |
-| `detalhar_empresa` | Mostra todos os dados de um CNPJ                                             |
-| `exportar_csv`     | Gera uma planilha CSV pronta para o Excel                                    |
-| `status_base`      | Informa o mês de referência e as UFs importadas                              |
+| Ferramenta           | O que faz                                                                    |
+| -------------------- | ---------------------------------------------------------------------------- |
+| `buscar_empresas`    | Lista empresas com CNPJ, razão social, atividade, endereço e contatos        |
+| `contar_empresas`    | Conta empresas, agrupando por UF, município, bairro, CNAE, porte, MEI ou ano |
+| `buscar_cnae`        | Descobre o código CNAE a partir da descrição da atividade                    |
+| `buscar_municipio`   | Encontra municípios pelo nome                                                |
+| `detalhar_empresa`   | Mostra todos os dados de um CNPJ                                             |
+| `exportar_csv`       | Gera uma planilha CSV pronta para o Excel                                    |
+| `status_base`        | Informa o mês de referência e as UFs importadas                              |
+| `baixar_dados`       | Baixa os dados da Receita em segundo plano, a pedido do usuário              |
+| `andamento_download` | Mostra a etapa do download iniciado pelo agente                              |
 
 **Filtros:** CNAE (exato ou por prefixo, principal ou secundário), UF, município, bairro,
 CEP, situação cadastral, data de abertura, porte, MEI, matriz/filial, capital social e

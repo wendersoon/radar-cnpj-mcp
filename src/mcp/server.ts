@@ -8,9 +8,14 @@ export interface ServerOptions {
   version: string;
   /** Folder where exportar_csv writes files. */
   exportDir: string;
+  databasePath: string;
+  /** Script of this CLI, run as a separate process by baixar_dados. */
+  cliPath: string;
 }
 
 const INSTRUCTIONS = `Busca empresas brasileiras na base pública de CNPJ da Receita Federal, importada localmente.
+
+Sem base importada, as ferramentas de consulta retornam erro: confirme com o usuário as UFs e o download de cerca de 7 GB, use baixar_dados e acompanhe com andamento_download.
 
 Fluxo recomendado:
 1. Use buscar_cnae para transformar a atividade descrita pelo usuário em códigos CNAE.

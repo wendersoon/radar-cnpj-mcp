@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
+import { downloadStatusPath, readDownloadStatus, startDownload } from '../data/download-job.ts';
 import type { RepositoryProvider } from '../data/provider.ts';
 import { UFS } from '../domain/codes.ts';
 import { countShape, filterShape, SORT_ORDERS, searchShape } from '../domain/filters.ts';
@@ -16,7 +17,7 @@ const MAX_EXPORT_ROWS = 200_000;
 export function registerTools(
   server: McpServer,
   provider: RepositoryProvider,
-  options: Pick<ServerOptions, 'exportDir'>,
+  options: Pick<ServerOptions, 'exportDir' | 'databasePath' | 'cliPath'>,
 ): void {
   server.registerTool(
     'buscar_empresas',
@@ -138,6 +139,68 @@ export function registerTools(
       annotations: READ_ONLY,
     },
     () => run(async () => (await provider.get()).status()),
+  );
+
+  server.registerTool(
+    'baixar_dados',
+    {
+      title: 'Baixar dados da Receita',
+      description:
+        'Baixa os arquivos da Receita Federal e monta a base local, em segundo plano. São cerca de 7 GB de download, mesmo para uma só UF, e o processo pode levar bem mais de uma hora. SUBSTITUI a base atual quando termina: informe todas as UFs desejadas, inclusive as já importadas. Só use depois que o usuário confirmar as UFs e o download. Acompanhe com andamento_download; a base atual continua disponível até o fim.',
+      inputSchema: {
+        ufs: z
+          .array(z.enum(UFS))
+          .min(1)
+          .optional()
+          .describe('UFs a importar. Informe ufs ou todas.'),
+        todas: z.boolean().default(false).describe('Importar o Brasil inteiro.'),
+        mes: z
+          .string()
+          .regex(/^\d{4}-\d{2}$/, 'Use o formato AAAA-MM.')
+          .optional()
+          .describe('Mês de referência (AAAA-MM). Padrão: o mais recente.'),
+      },
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: true,
+        idempotentHint: false,
+        openWorldHint: true,
+      },
+    },
+    ({ ufs, todas, mes }) =>
+      run(async () => {
+        if (todas === Boolean(ufs)) {
+          throw new Error('Informe ufs ou todas: true, apenas um dos dois.');
+        }
+        const { iniciado, status } = await startDownload({
+          databasePath: options.databasePath,
+          cliPath: options.cliPath,
+          states: ufs ?? [],
+          month: mes,
+        });
+        return {
+          iniciado,
+          mensagem: iniciado
+            ? 'Download iniciado em segundo plano. Consulte andamento_download.'
+            : 'Já existe um download em andamento; nenhum outro foi iniciado.',
+          ...status,
+        };
+      }),
+  );
+
+  server.registerTool(
+    'andamento_download',
+    {
+      title: 'Andamento do download',
+      description:
+        'Informa o estado do último download iniciado (baixando, concluido, erro ou interrompido) e a etapa atual.',
+      annotations: READ_ONLY,
+    },
+    () =>
+      run(async () => {
+        const path = downloadStatusPath(options.databasePath);
+        return (await readDownloadStatus(path)) ?? { estado: 'nenhum' };
+      }),
   );
 }
 

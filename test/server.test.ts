@@ -19,7 +19,12 @@ async function connect(
   databasePath: string,
 ): Promise<{ client: Client; provider: LazyRepositoryProvider }> {
   const provider = new LazyRepositoryProvider(databasePath);
-  const server = createServer(provider, { version: 'test', exportDir: join(workDir, 'exports') });
+  const server = createServer(provider, {
+    version: 'test',
+    exportDir: join(workDir, 'exports'),
+    databasePath,
+    cliPath: join(workDir, 'cli-inexistente.js'),
+  });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   const client = new Client({ name: 'test', version: '1.0.0' });
   await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
@@ -51,11 +56,13 @@ afterAll(async () => {
 });
 
 describe('MCP server', () => {
-  it('exposes read-only search tools and a non-destructive export', async () => {
+  it('exposes read-only search tools, a non-destructive export and a download', async () => {
     const { tools } = await client.listTools();
     const byName = Object.fromEntries(tools.map((tool) => [tool.name, tool]));
 
     expect(Object.keys(byName).sort()).toEqual([
+      'andamento_download',
+      'baixar_dados',
       'buscar_cnae',
       'buscar_empresas',
       'buscar_municipio',
@@ -65,6 +72,12 @@ describe('MCP server', () => {
       'status_base',
     ]);
     expect(byName.buscar_empresas?.annotations?.readOnlyHint).toBe(true);
+    expect(byName.andamento_download?.annotations?.readOnlyHint).toBe(true);
+    expect(byName.baixar_dados?.annotations).toMatchObject({
+      readOnlyHint: false,
+      destructiveHint: true,
+      openWorldHint: true,
+    });
     expect(byName.exportar_csv?.annotations).toMatchObject({
       readOnlyHint: false,
       destructiveHint: false,
@@ -102,6 +115,17 @@ describe('MCP server', () => {
 
     const pathTraversal = await call('exportar_csv', { arquivo: '../../etc/evil.csv' });
     expect(pathTraversal.isError).toBe(true);
+  });
+
+  it.each([
+    ['neither ufs nor todas', {}],
+    ['both ufs and todas', { ufs: ['SP'], todas: true }],
+    ['an invalid state', { ufs: ['XX'] }],
+    ['an invalid month', { ufs: ['SP'], mes: '10/2026' }],
+  ])('refuses a download with %s', async (_, args) => {
+    const result = await call('baixar_dados', args);
+    expect(result.isError).toBe(true);
+    expect(json(await call('andamento_download'))).toEqual({ estado: 'nenhum' });
   });
 
   it('explains how to import when the database is missing', async () => {
