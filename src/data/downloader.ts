@@ -14,7 +14,8 @@ export const DEFAULT_SHARE_URL =
 const WORK_DIR_PREFIX = '.radar-download-';
 const DOWNLOAD_ATTEMPTS = 3;
 const PARALLEL_DOWNLOADS = 4;
-const SPARE_BYTES = 1024 ** 3;
+/** The import needs room for a staging copy and sorting: measured peak of about twice the ZIPs. */
+const IMPORT_SPACE_FACTOR = 2;
 const MANUAL_HINT =
   'Você também pode baixar os arquivos pelo navegador e usar "radar-cnpj-mcp importar"; veja o README.';
 
@@ -95,7 +96,8 @@ export async function downloadDataset(options: DownloadOptions): Promise<Downloa
   try {
     const pending = await filesToDownload(files, workDir);
     const bytes = pending.reduce((sum, file) => sum + file.size, 0);
-    await ensureFreeSpace(workDir, bytes);
+    const totalBytes = files.reduce((sum, file) => sum + file.size, 0);
+    await ensureFreeSpace(workDir, bytes + totalBytes * IMPORT_SPACE_FACTOR);
 
     log(`Mês ${month}: baixando ${pending.length} arquivos da Receita (${formatBytes(bytes)})...`);
     await withManualHint(() =>
@@ -216,9 +218,9 @@ async function filesToDownload(files: RemoteEntry[], dir: string): Promise<Remot
 async function ensureFreeSpace(dir: string, bytes: number): Promise<void> {
   const { bavail, bsize } = await statfs(dir);
   const free = bavail * bsize;
-  if (free < bytes + SPARE_BYTES) {
+  if (free < bytes) {
     throw new DownloadError(
-      `Espaço insuficiente: o download precisa de ${formatBytes(bytes + SPARE_BYTES)} ` +
+      `Espaço insuficiente: o download e a importação precisam de cerca de ${formatBytes(bytes)} ` +
         `e há ${formatBytes(free)} livres.`,
     );
   }
