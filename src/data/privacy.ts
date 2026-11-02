@@ -22,7 +22,7 @@ export function withoutCpf(expression: string): string {
   const removed = once(once(expression));
   const noEmptyParens = String.raw`regexp_replace(${removed}, '\(\s*\)', '', 'g')`;
   const singleSpaced = String.raw`regexp_replace(${noEmptyParens}, '\s+', ' ', 'g')`;
-  const noSpaceBeforeComma = String.raw`regexp_replace(${singleSpaced}, ' ,', ',', 'g')`;
+  const noSpaceBeforeComma = `regexp_replace(${singleSpaced}, ' ,', ',', 'g')`;
   return `CASE WHEN regexp_matches(${expression}, '${CPF_SQL_PATTERN}')
     THEN NULLIF(trim(${noSpaceBeforeComma}, ' -/.,;:'), '')
     ELSE ${expression} END`;
