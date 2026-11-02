@@ -157,6 +157,17 @@ describe('search', () => {
     expect(mei?.razao_social).toBe('JOAO DA SILVA');
   });
 
+  it('removes CPFs from every free-text field', async () => {
+    const company = await repo.getCompany('55555555000140');
+    expect(company).toMatchObject({
+      nome_fantasia: 'FUNILARIA CENTRAL',
+      endereco: 'RUA JOSE PAULINO, 100',
+      bairro: 'CENTRO',
+      email: null,
+    });
+    expect((await search({ bairros: ['529'], situacao: 'todas' })).total).toBe(0);
+  });
+
   it('hides MEI contacts unless asked', async () => {
     const [hidden] = (await search({ mei: 'somente' })).empresas;
     expect(hidden).toMatchObject({ telefones: [], email: null, contatos_ocultos: true });
