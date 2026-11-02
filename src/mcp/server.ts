@@ -25,7 +25,7 @@ Fluxo recomendado:
 
 Para visão geral de uma cidade, use perfil_municipio. Para comparar cidades ou UFs, use comparar_regioes. Para saber se um setor está crescendo, use tendencia_setor.
 
-Por padrão só empresas ATIVAS são consideradas. Telefone e e-mail de MEIs costumam ser os da própria pessoa física: use-os com cuidado (LGPD).
+Por padrão só empresas ATIVAS são consideradas. Telefone e e-mail de MEIs costumam ser os da própria pessoa física: use-os com cuidado.
 Os dados refletem o mês de referência informado por status_base.`;
 
 /** Creates the MCP server with its tools, prompts and resources. */
