@@ -55,8 +55,11 @@ npx -y radar-cnpj-mcp baixar --ufs SP,MG
 ```
 
 São cerca de 7 GB de download, mesmo para uma só UF, porque a Receita não separa os arquivos por
-estado. Os arquivos baixados são apagados ao final; para guardá-los, use
-`--manter-arquivos <pasta>`. Para o Brasil inteiro, troque `--ufs` por `--todas`.
+estado. Reserve cerca de 20 GB livres durante o processo; ao final, os arquivos temporários são
+apagados e fica só a base (1,9 GB para SP e AC). Com SP e AC, levou cerca de 33 minutos, dos quais
+18 de download; o tempo depende da sua conexão e da máquina. Para guardar os ZIPs, use
+`--manter-arquivos <pasta>`. Para o Brasil inteiro, troque `--ufs` por `--todas`, o que exige mais
+tempo e espaço.
 
 <details>
 <summary><b>Prefere baixar pelo navegador?</b></summary>
