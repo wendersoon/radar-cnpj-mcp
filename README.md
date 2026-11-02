@@ -10,15 +10,15 @@ direto do seu agente de IA ou do terminal.**
 [![Node](https://img.shields.io/badge/node-%3E%3D20-339933?logo=node.js&logoColor=white)](https://nodejs.org)
 [![Licença: MIT](https://img.shields.io/badge/licen%C3%A7a-MIT-blue)](LICENSE)
 
-![Um agente de IA usando o radar-cnpj-mcp para prospectar oficinas mecânicas em Campinas](assets/agente.gif)
+![Um agente de IA usando o radar-cnpj-mcp para consultar oficinas mecânicas em Campinas](assets/agente.gif)
 
 </div>
 
 ## Por que
 
-Você vende algo para empresas e quer saber **quem são os clientes possíveis na sua região**:
-quantas oficinas existem em Campinas, quais academias abriram este ano em São Paulo, onde
-se concentram as clínicas odontológicas do estado.
+Você quer entender **quais empresas existem em um setor ou região**: quantas oficinas há em
+Campinas, quais academias abriram este ano em São Paulo, onde se concentram as clínicas
+odontológicas do estado.
 
 A Receita Federal publica o cadastro de **mais de 70 milhões de estabelecimentos**, mas em
 arquivos brutos de vários GB. O radar-cnpj-mcp transforma isso numa base local, consultada
