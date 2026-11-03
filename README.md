@@ -206,16 +206,14 @@ CNPJ](https://arquivos.receitafederal.gov.br/).
 
 ## LGPD
 
-O radar-cnpj-mcp é apenas uma interface local:
+O radar-cnpj-mcp é uma ferramenta de código aberto. O projeto não hospeda nem coleta dados: cada
+pessoa baixa a base pública de CNPJ direto da Receita Federal e consulta na própria máquina.
 
-- não hospeda, não coleta e não recebe dados nem consultas: cada pessoa baixa a base pública de
-  CNPJ da Receita Federal para a própria máquina;
-- não importa os dados de sócios.
+Por isso, não temos dados para excluir ou filtrar. Pedidos de alteração ou remoção devem ser feitos
+à Receita Federal.
 
-Por isso, o projeto não tem dados para alterar ou remover. Na origem, a solicitação precisa ser
-feita à própria Receita Federal.
+Quem usa a ferramenta responde pelo próprio uso dos dados, inclusive perante a LGPD.
 
-A razão social de MEIs e empresários individuais pode conter o nome da pessoa, e os contatos de
-MEIs costumam ser os dela, como constam na base da Receita. Quem usa a ferramenta decide o que faz
-com os dados e responde por esse uso, inclusive perante a LGPD. Este aviso não é um parecer
-jurídico.
+Os dados de sócios não são importados. A razão social de MEIs e empresários individuais pode conter
+o nome da pessoa, e os contatos de MEIs costumam ser os dela, como constam na base da Receita. Este
+aviso não é um parecer jurídico.
